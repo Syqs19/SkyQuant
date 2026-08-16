@@ -568,6 +568,38 @@ taken. Both are now carried under names that say whose they are, which is what G
 MPL-2.0 each ask for. Deleting the dependency's notice would have been simpler and wrong: its
 code is still in the jar.
 
+---
+
+## How the established mods handle the same questions
+
+Checked 16 August 2026 against Skyblocker, SkyHanni, Firmament and NEU, because "what does
+everyone else do" is the only available benchmark where the written rules are ambiguous.
+
+| | SkyQuant | Skyblocker | SkyHanni | Firmament | NEU |
+|---|---|---|---|---|---|
+| Licence | GPL-3.0 | LGPL-3.0 | LGPL-2.1 | GPL-3.0 | LGPL-3.0 |
+| Mojang disclaimer | yes | yes | yes | yes | yes |
+| Ban / rules warning | **a line of context** | none | none | none | none |
+| Sends player data | **no** | waypoints over WebSocket | uuid + profile uuid to a third party | - | - |
+| Asks for an API key | **no** | no | no | no | no |
+
+Three things fall out of it.
+
+**Nobody warns about bans, and neither should this.** All four carry the Mojang non-affiliation
+notice and nothing else. SkyQuant's README adds one paragraph of context - Hypixel certifies no
+mod, so this is at your own risk like all of them - which is a little more than the field does and
+stops short of implying an approval that does not exist.
+
+**Sending nothing is the strictest position here, not the normal one.** SkyHanni documents sending
+your player uuid and SkyBlock profile uuid to `api.eliteskyblock.com`, and Skyblocker shares
+waypoints between players over a WebSocket. Both are disclosed and neither is improper. SkyQuant
+makes only GETs carrying item ids, which is why the README can state plainly that nothing about
+the player leaves the client - a claim worth making precisely because it is not the default.
+
+**Attribution is where the field is weakest, and it is a licence condition.** SkyHanni's Modrinth
+page credits no data source at all. That is not a model to copy: Coflnet's terms require the
+credit wherever their data is shown, so `DataCredits` stays where it is.
+
 Three further points worth keeping in view:
 
 - **No API key is ever handled.** Hypixel's policy forbids entering keys into a mod
