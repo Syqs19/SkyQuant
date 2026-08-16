@@ -96,8 +96,7 @@ one is met.
       enabled, verified reachable
 - [x] Source published and licence recognised — GitHub reports the repository as GPL-3.0,
       matching `fabric.mod.json`
-- [ ] Point `homepage` at the Modrinth page once it exists (it currently points at the repo, since
-      a link that 404s is worse than one that merely duplicates `sources`)
+- [x] `homepage` points at the Modrinth page: https://modrinth.com/mod/skyquant
 - [x] Hypixel's allowed-modifications page read in full. It is an allow-list of four categories -
       performance, aesthetic, cosmetic HUD, brightness - and states that anything outside them is
       "disallowed by default". Read literally that excludes every SkyBlock information mod, NEU and
