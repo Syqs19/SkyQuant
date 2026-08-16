@@ -44,23 +44,23 @@ class BazaarHomeScreen(
      */
     private enum class Tab(val label: String, val defaultSort: DataTable.Sort?) {
         WATCH("Watchlist", null),
-        FLIP("Flip", DataTable.Sort(SORT_MARGIN)),
+        FLIP("Flip", DataTable.Sort(BazaarSort.MARGIN)),
 
         /**
          * Named for what you do, not for where the item ends up: "NPC → BZ" reads as an
          * instruction, where a label like "NPC" left it ambiguous which way round the trade
          * went - the question that started this pair of views existing.
          */
-        NPC_BUY("NPC → BZ", DataTable.Sort(SORT_TOTAL)),
+        NPC_BUY("NPC → BZ", DataTable.Sort(BazaarSort.TOTAL)),
         // Sorted by the order profit rather than a daily total, which this tab has no column for:
         // with no shop stock to multiply by, the per-unit figure is the whole story.
-        NPC_SELL("BZ → NPC", DataTable.Sort(SORT_ORDER_PROFIT)),
+        NPC_SELL("BZ → NPC", DataTable.Sort(BazaarSort.ORDER_PROFIT)),
 
-        CRAFT("Craft", DataTable.Sort(SORT_ORDER_PROFIT)),
+        CRAFT("Craft", DataTable.Sort(BazaarSort.ORDER_PROFIT)),
 
         // Sorted per hour rather than by profit, and that is the whole reason it is its own tab:
         // forge durations run from 30 seconds to a week, so the two rankings disagree completely.
-        FORGE("Forge", DataTable.Sort(SORT_PER_HOUR)),
+        FORGE("Forge", DataTable.Sort(BazaarSort.PER_HOUR)),
     }
 
     private var tab = Tab.WATCH
@@ -207,36 +207,62 @@ class BazaarHomeScreen(
             Palette.RULE,
         )
 
-        graphics.text(font, Component.literal("SKYQUANT"), left + PADDING, top + 10, Palette.NAME)
-
         // Connection state, where a terminal puts it: the figures below are worthless if the
         // feed is stale, so whether it's live has to be visible without being asked for. The
         // filled/hollow dot carries that on its own, so it survives any theme.
-        val connected = BazaarLivePrices.productIds.isNotEmpty()
-        val status = if (connected) "● LIVE" else "○ CONNECTING"
+        //
+        // Three states, not two. This used to ask only whether any product had loaded, which stays
+        // true forever once the first snapshot lands - so the indicator read LIVE through a
+        // network outage while the prices beneath it aged. STALE is the case that matters: it is
+        // the one where the numbers still look authoritative and are not.
+        val loaded = BazaarLivePrices.productIds.isNotEmpty()
+        val connected = loaded && BazaarLivePrices.isFresh()
+        val status = when {
+            connected -> "● LIVE"
+            loaded -> "◐ STALE " + staleAge()
+            else -> "○ CONNECTING"
+        }
         val statusX = left + panel.width() - PADDING - font.width(status)
         graphics.text(
             font,
             Component.literal(status),
             statusX,
             top + 10,
-            if (connected) Palette.POSITIVE else Palette.MUTED,
+            when {
+                connected -> Palette.POSITIVE
+                // Amber rather than grey: a stale feed is a fault to act on, where "connecting"
+                // is the ordinary first few seconds of a session.
+                loaded -> Palette.STALE
+                else -> Palette.MUTED
+            },
         )
 
-        // Where the figures come from, which Coflnet's terms require to be stated wherever their
-        // data is shown. It sits here rather than in the footer because the footer's hints are
-        // dropped on a narrow panel, and an attribution that disappears is not one.
+        // The mod's name, centred on the panel rather than tucked into the left corner: with the
+        // credit moved to the footer this strip carries two things, and a centred title reads as
+        // the heading of the whole terminal instead of as the first of a row of labels.
         //
-        // Centred between the two labels, and dropped only if it would collide with either -
-        // same rule as the footer, since a credit printing through the connection state would
-        // cost the reading of both.
-        val credit = DataCredits.SHORT
-        val creditX = left + (panel.width() - font.width(credit)) / 2
-        val clearOfTitle = creditX > left + PADDING + font.width("SKYQUANT") + TITLE_GAP
-        val clearOfStatus = creditX + font.width(credit) + TITLE_GAP < statusX
-        if (clearOfTitle && clearOfStatus) {
-            graphics.text(font, Component.literal(credit), creditX, top + 10, Palette.FAINT)
+        // Centred on the panel, not on the space left over beside the status - so it stays put as
+        // the status text changes between LIVE, STALE and CONNECTING, which are different widths.
+        // Dropped only if it would actually collide, for the same reason the footer drops its own
+        // right half: a title printing through the connection state costs the reading of both.
+        val title = "SKYQUANT"
+        val titleX = left + (panel.width() - font.width(title)) / 2
+        if (titleX + font.width(title) + TITLE_GAP < statusX) {
+            graphics.text(font, Component.literal(title), titleX, top + 10, Palette.NAME)
         }
+    }
+
+    /**
+     * How far behind the feed has fallen, as "3m" or "45s".
+     *
+     * A bare "STALE" leaves the reader unable to judge whether to wait or to go and check their
+     * connection; the age answers that without them having to ask.
+     */
+    private fun staleAge(): String {
+        val age = BazaarLivePrices.snapshotAgeMillis() ?: return ""
+        val seconds = age / 1000
+
+        return if (seconds < 60) "${seconds}s" else "${seconds / 60}m"
     }
 
     private fun drawTabs(graphics: GuiGraphicsExtractor, pose: Matrix3x2f, mouseX: Int, mouseY: Int) {
@@ -312,7 +338,7 @@ class BazaarHomeScreen(
             return
         }
 
-        val table = DataTable(watchColumns(width), x, width)
+        val table = DataTable(BazaarColumns.watchlist(width, changeColumnTitle()), x, width)
         var y = table.drawHeader(graphics, font, top)
 
         table.headerTooltipAt(font, top, mouseX, mouseY)?.let { pendingTooltip = it }
@@ -364,14 +390,14 @@ class BazaarHomeScreen(
         mouseY: Int,
     ) {
         val sort = sortOf(Tab.FLIP)
-        val flips = BazaarMarketSummary.bestFlips(LIST_ROWS).sortedWith(marketComparator(sort))
+        val flips = BazaarMarketSummary.bestFlips(LIST_ROWS).sortedWith(BazaarSort.marketFlips(sort))
 
         if (flips.isEmpty()) {
             drawEmptyState(graphics, x, top, listOf("Waiting for the first price snapshot…" to Palette.MUTED))
             return
         }
 
-        val table = DataTable(flipColumns(width), x, width)
+        val table = DataTable(BazaarColumns.flips(width), x, width)
         var y = table.drawHeader(graphics, font, top, sort, mouseX, mouseY)
 
         table.headerTooltipAt(font, top, mouseX, mouseY)?.let { pendingTooltip = it }
@@ -407,13 +433,6 @@ class BazaarHomeScreen(
     }
 
     /**
-     * Items to buy on the bazaar and sell to an NPC shop.
-     *
-     * The buy figure shown is the *order* price, not the instant-buy one, because that is the
-     * trade this ranks - instant-buying and reselling to a shop is worth well under 1% on even
-     * the best item, since bots close that gap continuously.
-     */
-    /**
      * Buy from an NPC shop, sell on the bazaar - the direction worth trading. Measured on live
      * data it reached +2762% against under 1% the other way round.
      */
@@ -440,7 +459,7 @@ class BazaarHomeScreen(
         }
 
         drawFlipTable(
-            graphics, Tab.NPC_BUY, npcBuyColumns(width), x, top, width, bottom, mouseX, mouseY,
+            graphics, Tab.NPC_BUY, BazaarColumns.npcToBazaar(width), x, top, width, bottom, mouseX, mouseY,
             flips = NpcFlipSummary.npcToBazaar(LIST_ROWS),
             emptyMessage = listOf(
                 "Nothing worth buying from a shop right now." to Palette.MUTED,
@@ -467,7 +486,7 @@ class BazaarHomeScreen(
         }
 
         drawFlipTable(
-            graphics, Tab.NPC_SELL, npcSellColumns(width), x, top, width, bottom, mouseX, mouseY,
+            graphics, Tab.NPC_SELL, BazaarColumns.bazaarToNpc(width), x, top, width, bottom, mouseX, mouseY,
             flips = NpcFlipSummary.bazaarToNpc(LIST_ROWS),
             emptyMessage = listOf(
                 "Nothing worth selling to an NPC right now." to Palette.MUTED,
@@ -500,7 +519,7 @@ class BazaarHomeScreen(
         }
 
         val sort = sortOf(tab)
-        val sorted = flips.sortedWith(flipComparator(sort))
+        val sorted = flips.sortedWith(BazaarSort.npcFlips(sort))
 
         val table = DataTable(columns, x, width)
         var y = table.drawHeader(graphics, font, top, sort, mouseX, mouseY)
@@ -555,7 +574,7 @@ class BazaarHomeScreen(
         mouseX: Int,
         mouseY: Int,
     ) = drawCraftTable(
-        graphics, Tab.CRAFT, craftColumns(width, forge = false),
+        graphics, Tab.CRAFT, BazaarColumns.crafts(width, forge = false),
         x, top, width, bottom, mouseX, mouseY,
         crafts = CraftSummary.crafts(),
         emptyMessage = recipeEmptyMessage(),
@@ -577,7 +596,7 @@ class BazaarHomeScreen(
         mouseX: Int,
         mouseY: Int,
     ) = drawCraftTable(
-        graphics, Tab.FORGE, craftColumns(width, forge = true),
+        graphics, Tab.FORGE, BazaarColumns.crafts(width, forge = true),
         x, top, width, bottom, mouseX, mouseY,
         crafts = CraftSummary.forges(),
         emptyMessage = recipeEmptyMessage(),
@@ -639,7 +658,7 @@ class BazaarHomeScreen(
         }
 
         val sort = sortOf(tab)
-        val sorted = crafts.sortedWith(craftComparator(sort))
+        val sorted = crafts.sortedWith(BazaarSort.crafts(sort))
 
         val table = DataTable(columns, x, width)
         var y = table.drawHeader(graphics, font, top, sort, mouseX, mouseY)
@@ -658,11 +677,17 @@ class BazaarHomeScreen(
                     add(DataTable.Cell(if (BazaarWatchlist.isTracked(craft.outputId)) "◆" else "", Palette.ACCENT))
                     add(craftNameCell(craft))
                     add(pairedCostCell(craft))
-                    add(pairedProfitCell(craft.instantProfit, craft.orderProfit))
+                    // The Forge page's left-hand figure is the mixed trade - ingredients bought
+                    // outright, result sold on an offer - because that is what a recipe with a
+                    // wait in it actually calls for. See [CraftProfit.Craft.forgeProfit]. On the
+                    // Craft page the pair stays fast-against-patient, where it describes two
+                    // trades somebody could really choose between.
+                    val fastFigure = if (isForge) craft.forgeProfit else craft.instantProfit
+                    add(pairedProfitCell(fastFigure, craft.orderProfit))
                     if (isForge) {
                         add(
                             pairedProfitCell(
-                                craft.profitPerHour(craft.instantProfit),
+                                craft.profitPerHour(fastFigure),
                                 craft.profitPerHour(craft.orderProfit),
                             ),
                         )
@@ -783,19 +808,12 @@ class BazaarHomeScreen(
     )
 
     /**
-     * A day's takings both ways round, in one column: instant on the left of the slash, order
-     * on the right.
+     * A day's takings both ways round: instant on the left of the slash, order on the right.
      *
      * Paired rather than given a column each because the two are read against each other - the
      * question is which route is worth the wait - and because two more numeric columns is more
      * than the panel has room for. One decimal throughout: "174.53k/307.28k" overflows the
      * column, and the second decimal is below the noise of a price that moves every minute.
-     *
-     * Coloured by the better of the two, since that is what the row is ranked on, and left
-     * neutral where nothing is positive.
-     */
-    /**
-     * A day's takings both ways round: instant on the left of the slash, order on the right.
      *
      * Each half is coloured by its own sign. Colouring the cell by the better of the two put a
      * loss in the same green as the gain next to it - Minnow Bait read "-2.6k/92.5k" entirely
@@ -854,306 +872,6 @@ class BazaarHomeScreen(
         scrollRange = if (total <= visible) null else "${scroll + 1}-${minOf(scroll + visible, total)} of $total"
     }
 
-    private fun marketComparator(sort: DataTable.Sort?): Comparator<BazaarMarketSummary.Flip> {
-        val by = when (sort?.key) {
-            SORT_PROFIT -> compareBy<BazaarMarketSummary.Flip> { it.profitPerUnit }
-            SORT_DEPTH -> compareBy { minOf(it.buyDepth, it.sellDepth) }
-            else -> compareBy { it.marginPercent }
-        }
-        return if (sort?.descending != false) by.reversed() else by
-    }
-
-    /**
-     * Columns for the two recipe views.
-     *
-     * [forge] adds the duration and the per-hour figure, and drops the instant exit. That is not
-     * a space compromise but a reading of the trade: a recipe you waited six hours for is not one
-     * you then sell at the standing bid. It also keeps the name column wide enough - with every
-     * figure given a place the arithmetic left it 32px short of the longest item name.
-     */
-    private fun craftColumns(width: Int, forge: Boolean): List<DataTable.Column> {
-        // Every figure column holds a pair, so the whole table reads on one convention: left of
-        // the slash is the fast trade, right of it the patient one.
-        val pairedColumns = if (forge) 3 else 2
-        val fixed = PIN_COLUMN_WIDTH + VOLUME_COLUMN_WIDTH + PAIRED_COLUMN_WIDTH * pairedColumns +
-            if (forge) 0 else MARGIN_COLUMN_WIDTH
-        val nameWidth = (width - fixed).coerceAtLeast(MIN_NAME_COLUMN_WIDTH)
-
-        // Repeated in each description rather than stated once: a tooltip is read on its own,
-        // and a reader hovering "Profit" has no reason to have hovered "Cost" first.
-        val pairNote = " Left of the slash: buy outright and sell into the bids, done in a minute. " +
-            "Right: a buy order and a sell offer, cheaper and slower."
-
-        return buildList {
-            add(DataTable.Column("", PIN_COLUMN_WIDTH, markerColumn = true))
-            add(
-                DataTable.Column(
-                    "Item",
-                    nameWidth,
-                    numeric = false,
-                    description = "What the recipe makes, and how many one craft yields. " +
-                        "\"AH\" means the price comes from the auction house - the median of the " +
-                        "four cheapest listings, an estimate of what yours would fetch rather " +
-                        "than a standing bid. \"!\" beside it means the cheapest listing sits far " +
-                        "below the others, so that market is thin.",
-                ),
-            )
-            add(
-                DataTable.Column(
-                    "Cost",
-                    PAIRED_COLUMN_WIDTH,
-                    description = "What the ingredients cost." + pairNote +
-                        " For most items the two are identical, but cheap raw materials can be " +
-                        "several times dearer bought outright - gravel is nineteen times.",
-                    sortKey = SORT_COST,
-                ),
-            )
-            add(
-                DataTable.Column(
-                    "Profit",
-                    PAIRED_COLUMN_WIDTH,
-                    description = "Coins kept per craft, after the bazaar's cut on the sale." +
-                        pairNote + " Several recipes lose money the fast way and make it the slow " +
-                        "way, which is why both are here.",
-                    sortKey = SORT_ORDER_PROFIT,
-                ),
-            )
-            if (forge) {
-                add(
-                    DataTable.Column(
-                        "Per hour",
-                        PAIRED_COLUMN_WIDTH,
-                        description = "Profit spread over the time the slot is busy - the only " +
-                            "fair way to rank a forge recipe, since durations run from 30 seconds " +
-                            "to a week. A 30-second recipe making 259k beats a 6-hour one making " +
-                            "11.65M." + pairNote,
-                        sortKey = SORT_PER_HOUR,
-                    ),
-                )
-            } else {
-                add(
-                    DataTable.Column(
-                        "Margin",
-                        MARGIN_COLUMN_WIDTH,
-                        description = "Profit against the money that trade puts up, so cheap and " +
-                            "expensive recipes rank on equal terms." + pairNote,
-                        sortKey = SORT_MARGIN,
-                    ),
-                )
-            }
-            add(
-                DataTable.Column(
-                    "Vol 7d",
-                    VOLUME_COLUMN_WIDTH,
-                    description = "Weekly volume of the scarcest ingredient - the one that caps " +
-                        "how often this can actually be run.",
-                ),
-            )
-        }
-    }
-
-    private fun craftComparator(sort: DataTable.Sort?): Comparator<CraftProfit.Craft> {
-        val by = when (sort?.key) {
-            SORT_INSTANT_PROFIT -> compareBy<CraftProfit.Craft> { it.instantProfit }
-            SORT_MARGIN -> compareBy { it.orderMargin }
-            SORT_COST -> compareBy { it.cost }
-            // Per hour and per craft are the same ordering when nothing has a duration, which is
-            // why the Craft tab can share this comparator without a special case.
-            SORT_PER_HOUR -> compareBy { it.profitPerHour(it.orderProfit) }
-            else -> compareBy { it.orderProfit }
-        }
-        return if (sort?.descending != false) by.reversed() else by
-    }
-
-    private fun flipComparator(sort: DataTable.Sort?): Comparator<NpcFlipSummary.Flip> {
-        val by = when (sort?.key) {
-            SORT_INSTANT_PROFIT -> compareBy<NpcFlipSummary.Flip> { it.instantProfit }
-            SORT_ORDER_PROFIT -> compareBy { it.orderProfit }
-            // The daily limit is the same multiplier on every row, so ranking by the total is
-            // ranking by the better per-unit profit - no need to multiply just to compare.
-            else -> compareBy { maxOf(it.instantProfit, it.orderProfit) }
-        }
-        return if (sort?.descending != false) by.reversed() else by
-    }
-
-    /**
-     * Column widths are derived from the panel so the name column absorbs whatever is left over,
-     * keeping the figures a fixed distance from the right edge at any window size.
-     */
-    private fun watchColumns(width: Int): List<DataTable.Column> {
-        val fixed = PIN_COLUMN_WIDTH + PRICE_COLUMN_WIDTH * 2 + CHANGE_COLUMN_WIDTH + SPREAD_COLUMN_WIDTH
-        return listOf(
-            DataTable.Column("", PIN_COLUMN_WIDTH, numeric = false, markerColumn = true),
-            DataTable.Column("Item", (width - fixed).coerceAtLeast(60), numeric = false),
-            DataTable.Column("Buy", PRICE_COLUMN_WIDTH, description = "What you pay to buy this item instantly."),
-            DataTable.Column("Sell", PRICE_COLUMN_WIDTH, description = "What you receive selling it instantly."),
-            DataTable.Column(
-                changeColumnTitle(),
-                CHANGE_COLUMN_WIDTH,
-                description = "How the buy price moved over the session so far.",
-            ),
-            DataTable.Column(
-                "Spread",
-                SPREAD_COLUMN_WIDTH,
-                description = "Gap between buy and sell, as a share of the buy price. The margin a flip has to work with.",
-            ),
-        )
-    }
-
-    /**
-     * The order-to-order flip, which is the trade people actually make: place a buy order, wait,
-     * place a sell offer, wait. Instant prices are gone from this view - crossing the spread
-     * twice clears almost nothing, so ranking by it flattered items nobody could profit from.
-     */
-    private fun flipColumns(width: Int): List<DataTable.Column> {
-        val fixed = PIN_COLUMN_WIDTH + PRICE_COLUMN_WIDTH * 3 + SPREAD_COLUMN_WIDTH + VOLUME_COLUMN_WIDTH * 2
-        return listOf(
-            DataTable.Column("", PIN_COLUMN_WIDTH, numeric = false, markerColumn = true),
-            DataTable.Column("Item", (width - fixed).coerceAtLeast(50), numeric = false),
-            DataTable.Column(
-                "Buy @",
-                PRICE_COLUMN_WIDTH,
-                description = "Where your buy order has to sit to compete: the cheapest price " +
-                    "anyone is currently asking.",
-            ),
-            DataTable.Column(
-                "Sell @",
-                PRICE_COLUMN_WIDTH,
-                description = "Where your sell offer fills: the best price anyone is currently bidding.",
-            ),
-            DataTable.Column(
-                "Profit",
-                PRICE_COLUMN_WIDTH,
-                description = "Coins kept per unit after the bazaar's cut on the sale.",
-                sortKey = SORT_PROFIT,
-            ),
-            DataTable.Column(
-                "Margin",
-                SPREAD_COLUMN_WIDTH,
-                description = "Profit against what it costs to get in. Ranks cheap and expensive " +
-                    "items on equal terms.",
-                sortKey = SORT_MARGIN,
-            ),
-            DataTable.Column(
-                "Depth",
-                VOLUME_COLUMN_WIDTH,
-                description = "Units queued at those two prices, whichever side is thinner. " +
-                    "Buy more than this and you move the price against yourself.",
-                sortKey = SORT_DEPTH,
-            ),
-            DataTable.Column(
-                "Vol 7d",
-                VOLUME_COLUMN_WIDTH,
-                description = "Units traded this week. A wide margin on a thin market is a " +
-                    "position you can't get out of.",
-            ),
-        )
-    }
-
-    /**
-     * Shared shape for both NPC views: cost, then the two exits side by side, each with its
-     * profit and its margin. Laying them out as a pair is the point - several rows lose money
-     * one way and make it the other, which no single column could show.
-     */
-    private fun flipTableColumns(
-        width: Int,
-        costTitle: String,
-        costDescription: String,
-        instantTitle: String,
-        instantDescription: String,
-        orderTitle: String,
-        orderDescription: String,
-        /**
-         * Whether a shop's daily stock limits the trade.
-         *
-         * True only buying *from* an NPC. Selling to one has no cap, and the bazaar has no daily
-         * stock at all - you can buy as much as the order book holds. Showing the column on both
-         * tabs put a flat "640" on every row of BZ → NPC, where it neither limited anything nor
-         * varied between rows: a column that reads the same all the way down distinguishes
-         * nothing, and implied a cap that does not exist.
-         */
-        stockLimited: Boolean,
-    ): List<DataTable.Column> {
-        // Both the Profit total and the Stock column exist only where a daily cap does. Without
-        // one the "total" is the per-unit profit multiplied by one, which is the Now and Order
-        // columns printed a second time - "-45.5 / +949.3" followed by "-45/949".
-        val extraWidth = if (stockLimited) NPC_TOTAL_WIDTH + NPC_STOCK_WIDTH else 0
-        val fixed = PIN_COLUMN_WIDTH + NPC_PRICE_WIDTH * 3 + extraWidth
-
-        return listOf(
-            DataTable.Column("", PIN_COLUMN_WIDTH, numeric = false, markerColumn = true),
-            DataTable.Column("Item", (width - fixed).coerceAtLeast(50), numeric = false),
-            DataTable.Column(costTitle, NPC_PRICE_WIDTH, description = costDescription),
-            DataTable.Column(
-                instantTitle,
-                NPC_PRICE_WIDTH,
-                description = instantDescription,
-                sortKey = SORT_INSTANT_PROFIT,
-            ),
-            DataTable.Column(
-                orderTitle,
-                NPC_PRICE_WIDTH,
-                description = orderDescription,
-                sortKey = SORT_ORDER_PROFIT,
-            ),
-        ) + if (!stockLimited) {
-            // Nothing to add: Now and Order already are the per-unit profits, and with no cap to
-            // multiply by there is no third figure to report.
-            emptyList()
-        } else {
-            listOf(
-                // A day's takings, which only means something against a shop's daily stock.
-                DataTable.Column(
-                    "Profit",
-                    NPC_TOTAL_WIDTH,
-                    description = "A day's profit both ways round: $instantTitle then $orderTitle, " +
-                        "each times the whole stock. The Stock column says how many units that is " +
-                        "and where the number came from. " +
-                        (if (NpcDailyLimit.default > NpcDailyLimit.STANDARD) {
-                            "Mayor Diaz's tenfold limit is switched on in the settings."
-                        } else {
-                            "Turn on Mayor Diaz in the settings while he is in office."
-                        }),
-                    sortKey = SORT_TOTAL,
-                ),
-                // Replaces the weekly volume here, which matters less against a fixed shop price
-                // than knowing how many units the total was actually built on.
-                DataTable.Column(
-                    "Stock",
-                    NPC_STOCK_WIDTH,
-                    numeric = false,
-                    description = "Units per shop behind the total. ○ is the assumed daily limit; " +
-                        "■ is what a shop's own stock line said, which is what is left today. " +
-                        "×2 means two shops sell it, each with separate stock.",
-                ),
-            )
-        }
-    }
-
-    private fun npcBuyColumns(width: Int): List<DataTable.Column> = flipTableColumns(
-        width,
-        costTitle = "Cost",
-        costDescription = "What the NPC charges per unit. A fixed shop price, not a market.",
-        instantTitle = "Now",
-        instantDescription = "Profit selling instantly into the bazaar, after tax. Certain, but smaller.",
-        orderTitle = "Offer",
-        orderDescription = "Profit from a sell offer, after tax. Larger, but only once someone buys.",
-        // Buying from a shop: 640 units a day, and that cap is the whole shape of this trade.
-        stockLimited = true,
-    )
-
-    private fun npcSellColumns(width: Int): List<DataTable.Column> = flipTableColumns(
-        width,
-        costTitle = "Buy",
-        costDescription = "What you pay buying instantly on the bazaar.",
-        instantTitle = "Now",
-        instantDescription = "Profit buying instantly and selling to the shop. No bazaar tax applies.",
-        orderTitle = "Order",
-        orderDescription = "Profit if a buy order fills at the lower price first. Cheaper, but you wait.",
-        // Buying on the bazaar and selling to a shop: neither side has a daily stock.
-        stockLimited = false,
-    )
-
     /**
      * Labelled with the window actually recorded rather than a fixed "15min": history only
      * covers the current session, so early on the figure spans far less than the full window
@@ -1174,35 +892,35 @@ class BazaarHomeScreen(
     }
 
     /**
-     * Footer with counts and the keys that work here - the terminal convention of keeping
-     * available actions on screen rather than leaving them to be discovered.
+     * Footer: where you are in the list on the left, where the data came from on the right.
+     *
+     * The keyboard hints that used to sit here are gone. They described what the table already
+     * shows - a row highlights under the cursor, a heading takes a sort arrow when clicked - so
+     * they cost a line of the panel to teach what one click teaches better. The tracked and pinned
+     * counts went with them for the same reason: both are visible in the list they count.
+     *
+     * What stayed is what the table cannot show. The tax rate qualifies every profit figure above
+     * it, and the credit is required wherever Coflnet's data is.
      */
     private fun drawStatusBar(graphics: GuiGraphicsExtractor, x: Int, y: Int, width: Int) {
-        // Which rows are on screen goes on the left, ahead of the collection counts: it changes
-        // as the player scrolls, so it is the live figure of the three.
+        // Scroll position first, since it changes as the player moves; the tax rate follows it and
+        // only appears on the views whose figures are net of it.
         val left = listOfNotNull(
             scrollRange,
-            "${BazaarWatchlist.tracked.size} tracked",
-            "${BazaarWatchlist.pinned.size} pinned",
+            taxNote().takeIf { tab == Tab.FLIP || tab == Tab.NPC_BUY },
         ).joinToString(" · ")
 
-        graphics.text(font, Component.literal(left), x, y, Palette.FAINT)
+        // The attribution, which Coflnet's terms require to be stated wherever their data is
+        // shown. Drawn first, and unconditionally: it moved here from the title bar and the
+        // priority moved with it, so on a narrow panel the *left* side is what gives way. An
+        // attribution that disappears is not one, where a scroll position that does is merely
+        // missing.
+        val credit = DataCredits.SHORT
+        val creditX = x + width - font.width(credit)
+        graphics.text(font, Component.literal(credit), creditX, y, Palette.FAINT)
 
-        val hints = when (tab) {
-            Tab.WATCH -> "row → graph · ◇ → pin"
-            // The rate is stated on every view whose figures are net of it, with where it came
-            // from: a net figure whose tax is invisible is one the player cannot check.
-            // "assumed" is the prompt to go and fix it, and goes away once calibrated.
-            Tab.FLIP, Tab.NPC_BUY -> taxNote() + " · heading → sort"
-            else -> "row → graph · heading → sort"
-        }
-
-        // Dropped rather than allowed to overlap. Both halves are right- and left-anchored to
-        // the same strip, so on a narrow panel they print through each other - which is exactly
-        // what the earlier version did - and a hint is worth less than a figure.
-        val hintX = x + width - font.width(hints)
-        if (hintX > x + font.width(left) + FOOTER_GAP) {
-            graphics.text(font, Component.literal(hints), hintX, y, Palette.FAINT)
+        if (left.isNotEmpty() && x + font.width(left) + FOOTER_GAP < creditX) {
+            graphics.text(font, Component.literal(left), x, y, Palette.FAINT)
         }
     }
 
@@ -1288,11 +1006,11 @@ class BazaarHomeScreen(
         val width = panel.width() - PADDING * 2
         return when (tab) {
             Tab.WATCH -> null
-            Tab.FLIP -> flipColumns(width)
-            Tab.NPC_BUY -> npcBuyColumns(width)
-            Tab.NPC_SELL -> npcSellColumns(width)
-            Tab.CRAFT -> craftColumns(width, forge = false)
-            Tab.FORGE -> craftColumns(width, forge = true)
+            Tab.FLIP -> BazaarColumns.flips(width)
+            Tab.NPC_BUY -> BazaarColumns.npcToBazaar(width)
+            Tab.NPC_SELL -> BazaarColumns.bazaarToNpc(width)
+            Tab.CRAFT -> BazaarColumns.crafts(width, forge = false)
+            Tab.FORGE -> BazaarColumns.crafts(width, forge = true)
         }
     }
 
@@ -1324,9 +1042,6 @@ class BazaarHomeScreen(
             minecraft.setScreen(BazaarHomeScreen(minecraft.screen))
         }
 
-        // Shared with BazaarGraphScreen so the screens read as one tool.
-
-
         private const val MAX_PANEL_WIDTH = 504
         private const val MAX_PANEL_HEIGHT = 296
         private const val PANEL_MARGIN = 24
@@ -1357,29 +1072,12 @@ class BazaarHomeScreen(
         private const val FOOTER_HEIGHT = 18
         private const val LINE_HEIGHT = 10
 
-        // Fixed so figures stay in line across rows and between the two tabs.
-        private const val PIN_COLUMN_WIDTH = 12
-
         /**
-         * Holds two figures and the slash between them, e.g. "105.4k/98.9k".
-         *
-         * Derived from the worst case rather than the usual one: both halves compact, six
-         * characters each at most, plus the separator.
+         * The pin column's width, needed here as well as in [BazaarColumns] because the click
+         * target for the pin toggle has to match the column it is drawn in. Read from there rather
+         * than repeated, so the two cannot drift apart.
          */
-        private const val PAIRED_COLUMN_WIDTH = 78
-
-        /** The same, for a pair of percentages - shorter, since they cap at four characters. */
-        private const val MARGIN_COLUMN_WIDTH = 72
-
-        /**
-         * Floor for the name column, so a narrow window truncates names rather than folding the
-         * column to nothing and leaving a row of anonymous figures.
-         */
-        private const val MIN_NAME_COLUMN_WIDTH = 90
-        private const val PRICE_COLUMN_WIDTH = 54
-        private const val CHANGE_COLUMN_WIDTH = 52
-        private const val SPREAD_COLUMN_WIDTH = 48
-        private const val VOLUME_COLUMN_WIDTH = 48
+        private const val PIN_COLUMN_WIDTH = BazaarColumns.PIN
 
         private const val TOOLTIP_MAX_WIDTH = 160
 
@@ -1392,27 +1090,6 @@ class BazaarHomeScreen(
 
         /** Rows per wheel notch. Three is the usual step and keeps place easy to follow. */
         private const val SCROLL_STEP = 3
-
-        // Sort keys. Shared between the column definitions and the comparators, so a typo is a
-        // compile error rather than a column that silently does nothing when clicked. Only the
-        // figures a view is actually ranked on get one - a heading that offers to sort implies
-        // that ordering by it is a useful way to read the list.
-        private const val SORT_PROFIT = "profit"
-        private const val SORT_MARGIN = "margin"
-        private const val SORT_DEPTH = "depth"
-        private const val SORT_INSTANT_PROFIT = "instantProfit"
-        private const val SORT_ORDER_PROFIT = "orderProfit"
-        private const val SORT_TOTAL = "total"
-        private const val SORT_COST = "cost"
-        private const val SORT_PER_HOUR = "perHour"
-
-        private const val NPC_PRICE_WIDTH = 46
-
-        /** Wider than a price column: it carries two figures and a separator. */
-        private const val NPC_TOTAL_WIDTH = 92
-
-        /** Holds a marker, a count and an optional "×2". */
-        private const val NPC_STOCK_WIDTH = 54
 
         /** Clear space kept between the footer's two halves before the hint is dropped. */
         private const val FOOTER_GAP = 12

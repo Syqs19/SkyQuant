@@ -194,11 +194,16 @@ object BazaarOverlay : HudElement {
 
         graphics.text(font, Component.literal("BAZAAR"), x + PADDING, y + 5, Palette.HEADING)
 
-        // Doubles as a staleness check: a feed that stopped updating is worse than no feed,
-        // because the numbers still look authoritative. The hollow dot says it without colour.
-        val stale = BazaarLivePrices.productIds.isEmpty()
-        if (stale) {
-            val text = "○ offline"
+        // A feed that stopped updating is worse than no feed, because the numbers still look
+        // authoritative. Two failures rather than one: nothing loaded yet, and loaded but no
+        // longer current - the second used to go unreported entirely, since this only tested
+        // whether the product list was empty and it never empties once filled.
+        val text = when {
+            BazaarLivePrices.productIds.isEmpty() -> "○ offline"
+            !BazaarLivePrices.isFresh() -> "◐ stale"
+            else -> null
+        }
+        if (text != null) {
             graphics.text(font, Component.literal(text), x + width - PADDING - font.width(text), y + 5, Palette.STALE)
         }
 
@@ -341,7 +346,4 @@ object BazaarOverlay : HudElement {
 
     /** Stands in for a real name when sizing an empty panel in the editor. */
     private const val PLACEHOLDER_NAME = "Ench Diamond Block"
-
-    // Darker and more opaque than the screens: this sits over moving scenery rather than a
-    // dimmed backdrop, so it needs more separation to stay readable.
 }

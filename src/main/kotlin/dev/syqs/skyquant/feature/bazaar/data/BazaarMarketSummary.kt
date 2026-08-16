@@ -24,7 +24,14 @@ object BazaarMarketSummary {
         val buyAt: Double,
         /** Where a sell offer fills: the best standing bid. */
         val sellAt: Double,
-        /** Units queued at those two prices - how much room there is before the price moves. */
+        /**
+         * How many units the trade could actually be done in, on each side.
+         *
+         * Not the quantity queued at the single best price, which is what these used to hold: the
+         * book runs to 30 levels and a flip fills across as many as it needs, so the first level
+         * alone understated the tradeable size by 11x at the median. These count everything within
+         * [BazaarLivePrices.MAX_SLIPPAGE_PERCENT] of the best price instead.
+         */
         val buyDepth: Long,
         val sellDepth: Long,
         val weeklyVolume: Long,
@@ -63,8 +70,8 @@ object BazaarMarketSummary {
                     productId = quote.productId,
                     buyAt = quote.topAsk,
                     sellAt = quote.topBid,
-                    buyDepth = quote.topAskAmount,
-                    sellDepth = quote.topBidAmount,
+                    buyDepth = quote.askDepth,
+                    sellDepth = quote.bidDepth,
                     weeklyVolume = quote.weeklyVolume,
                     profitPerUnit = quote.topBid * kept - quote.topAsk,
                 )
@@ -74,15 +81,6 @@ object BazaarMarketSummary {
             .take(limit)
             .toList()
     }
-
-    /** The most heavily traded products, i.e. where orders fill quickly. */
-    fun mostTraded(
-        limit: Int = 8,
-        quotes: Collection<BazaarLivePrices.Quote> = BazaarLivePrices.allQuotes(),
-    ): List<BazaarLivePrices.Quote> =
-        quotes
-            .sortedByDescending { it.weeklyVolume }
-            .take(limit)
 
     /**
      * Below this an order can sit unfilled for hours, which makes any margin theoretical.

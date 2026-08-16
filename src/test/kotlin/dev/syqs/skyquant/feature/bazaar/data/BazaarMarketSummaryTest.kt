@@ -13,6 +13,12 @@ import kotlin.test.assertTrue
  */
 class BazaarMarketSummaryTest {
 
+    /**
+     * [askDepth] and [bidDepth] are the book's depth within the slippage bound, which is what a
+     * flip's size is judged on. The `topXxxAmount` fields hold what sits at the single best price
+     * and default to a tenth of it - a realistic shape, since the first level is a small part of
+     * what is tradeable, and one that would catch a caller reading the wrong pair.
+     */
     private fun quote(
         id: String,
         ask: Double,
@@ -31,9 +37,11 @@ class BazaarMarketSummaryTest {
         buyMovingWeek = weekly,
         sellMovingWeek = weekly,
         topBid = bid,
-        topBidAmount = bidDepth,
+        topBidAmount = bidDepth / 10,
         topAsk = ask,
-        topAskAmount = askDepth,
+        topAskAmount = askDepth / 10,
+        bidDepth = bidDepth,
+        askDepth = askDepth,
     )
 
     @Test
@@ -131,25 +139,23 @@ class BazaarMarketSummaryTest {
     }
 
     @Test
+    fun `depth is the whole tradeable book, not the front of the queue`() {
+        // The figure a size decision needs. Reading topAskAmount instead - the units at the single
+        // best price - understated what could actually be traded by 11x at the median across the
+        // live bazaar, and by more than 2x on 1392 of 1736 products.
+        val flip = BazaarMarketSummary.bestFlips(
+            quotes = listOf(quote("DEEP", ask = 10.0, bid = 20.0, askDepth = 68_000, bidDepth = 68_000)),
+            taxRate = { 0.0 },
+        ).single()
+
+        assertEquals(68_000, flip.buyDepth, "depth must span the book, not one price level")
+    }
+
+    @Test
     fun `respects the limit`() {
         val many = (1..20).map { quote("ITEM_$it", ask = 100.0, bid = 120.0) }
 
         assertEquals(3, BazaarMarketSummary.bestFlips(limit = 3, quotes = many, taxRate = { 0.0 }).size)
-    }
-
-    @Test
-    fun `most traded ranks by the weaker side of the week`() {
-        // Liquidity is the weak side: a flip needs to buy *and* sell, so an item with heavy
-        // buying and no selling is not liquid.
-        val lopsided = quote("LOPSIDED", ask = 90.0, bid = 100.0).copy(
-            buyMovingWeek = 10_000_000,
-            sellMovingWeek = 5,
-        )
-        val even = quote("EVEN", ask = 90.0, bid = 100.0, weekly = 1_000)
-
-        val result = BazaarMarketSummary.mostTraded(quotes = listOf(lopsided, even))
-
-        assertEquals(listOf("EVEN", "LOPSIDED"), result.map { it.productId })
     }
 
     @Test

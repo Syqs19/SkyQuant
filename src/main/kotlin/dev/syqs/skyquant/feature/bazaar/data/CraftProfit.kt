@@ -46,6 +46,28 @@ object CraftProfit {
         val instantProfit: Double,
         /** Profit with a buy order and a sell offer - cheaper to get in, more to get out, slower. */
         val orderProfit: Double,
+        /**
+         * Profit buying the ingredients outright and selling the result with a sell offer.
+         *
+         * The trade a **forge** recipe actually calls for, and the reason it is not simply one of
+         * the two above. Those pair speed with speed and patience with patience, which is right
+         * when a craft completes instantly: paying a premium to buy quickly and then queuing a
+         * sell offer would hand back the speed you paid for.
+         *
+         * A forge slot changes that, because the wait is already there. Measured against the
+         * recipes in the repo, forge durations run from 30 seconds to a week with a **median of
+         * six hours** - so the minutes a sell offer takes are nothing next to the recipe itself,
+         * while a buy order that has to fill delays the one thing that is genuinely scarce: the
+         * moment the slot starts working.
+         *
+         * The two sides are also worth very different amounts. Across the liquid bazaar, buying
+         * outright costs 0.2% more at the median, where a sell offer earns up to 6.7% more at the
+         * 90th percentile. Haste is cheap on the way in and expensive on the way out, which is
+         * exactly the trade this figure describes.
+         *
+         * Equal to [orderProfit] on an instant craft, where there is no wait to exploit.
+         */
+        val forgeProfit: Double,
         val durationSeconds: Long,
         /** The weakest link: how many of the scarcest ingredient trade in a week. */
         val weeklyVolume: Long,
@@ -66,6 +88,9 @@ object CraftProfit {
         // of that difference.
         val instantMargin: Double get() = margin(instantProfit, instantCost)
         val orderMargin: Double get() = margin(orderProfit, cost)
+
+        /** Against [instantCost], since that is the money this trade actually puts up. */
+        val forgeMargin: Double get() = margin(forgeProfit, instantCost)
 
         private fun margin(profit: Double, against: Double): Double =
             if (against > 1e-9) profit / against * 100 else 0.0
@@ -140,9 +165,14 @@ object CraftProfit {
         // 8 of the 29 rows on the Craft page into showing a profit where buying the fast way
         // loses money - and flattering is the wrong direction to be wrong in.
         //
-        // The two remaining crosses are deliberately not offered. Buying instantly to then wait
-        // on a sell offer means paying a premium for speed you immediately give back, so it is a
-        // mistake rather than a strategy.
+        // One of the two crosses *is* offered, and only where it describes a real trade: buying
+        // outright and then selling on an offer is a mistake on an instant craft - you pay for
+        // speed and immediately give it back - but it is the sensible play on a forge recipe,
+        // where the wait is already there. See [Craft.forgeProfit].
+        //
+        // The other cross stays out. Placing a buy order and then dumping the result at the
+        // standing bid is patient where it costs you and hasty where it pays, which is the wrong
+        // way round on any recipe.
         return Craft(
             outputId = recipe.outputId,
             outputCount = recipe.outputCount,
@@ -150,6 +180,13 @@ object CraftProfit {
             instantCost = instantCost,
             instantProfit = revenueInstant - instantCost,
             orderProfit = revenueOrder - orderCost,
+            // Buy fast, sell patiently. Falls back to the order profit where there is no wait to
+            // exploit, so an instant craft's two columns stay the coherent pair they were.
+            forgeProfit = if (recipe.durationSeconds > 0) {
+                revenueOrder - instantCost
+            } else {
+                revenueOrder - orderCost
+            },
             durationSeconds = recipe.durationSeconds,
             // The ingredient that trades least is what caps how often this can actually be run.
             // Taking the output's own volume instead would flatter a recipe whose result sells
@@ -194,6 +231,15 @@ object CraftProfit {
             instantCost = instantCost,
             instantProfit = revenue - instantCost,
             orderProfit = revenue - orderCost,
+            // With one revenue figure the mixed trade is simply "buy fast, then list", which is
+            // what `instantProfit` already is - an auction has no patient exit to pair it with.
+            // On a forge recipe that is still the figure worth showing, since the choice the row
+            // presents is only ever about how the ingredients were bought.
+            forgeProfit = if (recipe.durationSeconds > 0) {
+                revenue - instantCost
+            } else {
+                revenue - orderCost
+            },
             durationSeconds = recipe.durationSeconds,
             weeklyVolume = if (scarcest == Long.MAX_VALUE) 0 else scarcest,
             fromAuction = true,

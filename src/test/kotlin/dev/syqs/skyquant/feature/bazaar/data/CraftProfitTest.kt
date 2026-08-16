@@ -14,15 +14,21 @@ import kotlin.test.assertTrue
  */
 class CraftProfitTest {
 
+    /**
+     * [instantBuy] is what buying outright costs, and defaults to [topAsk] so the two are equal
+     * unless a test needs them apart - which is the ordinary case anyway: measured across 622
+     * liquid products the median gap between them is 0%.
+     */
     private fun quote(
         id: String,
         topAsk: Double = 0.0,
         sellPrice: Double = 0.0,
         topBid: Double = 0.0,
         weekly: Long = 1_000_000,
+        instantBuy: Double = topAsk,
     ) = BazaarLivePrices.Quote(
         productId = id,
-        buyPrice = topAsk,
+        buyPrice = instantBuy,
         sellPrice = sellPrice,
         buyVolume = weekly,
         sellVolume = weekly,
@@ -427,5 +433,85 @@ class CraftProfitTest {
 
         assertTrue(craft.instantProfit < 0)
         assertTrue(craft.instantMargin < 0)
+    }
+
+    /**
+     * The mixed trade the Forge page shows: ingredients bought outright, result sold on an offer.
+     *
+     * It exists because a forge recipe already carries a wait - a median of six hours across the
+     * 120 in the repo - so the minutes a sell offer takes cost nothing, while a buy order that has
+     * to fill delays the slot itself. The measured asymmetry says the same: buying outright costs
+     * 0.2% more at the median, where selling on an offer earns up to 6.7% more.
+     */
+    @Test
+    fun `a forge recipe buys fast and sells patiently`() {
+        val craft = price(
+            Recipe("PLATE", 1.0, mapOf("ORE" to 10.0), durationSeconds = 6 * 3600),
+            mapOf(
+                // Ordering the ore costs 100 each; buying it outright costs 120.
+                "ORE" to quote("ORE", topAsk = 100.0, instantBuy = 120.0),
+                // Dumping the plate fetches 2000; a sell offer fetches 2600.
+                "PLATE" to quote("PLATE", sellPrice = 2_000.0, topBid = 2_600.0),
+            ),
+        )!!
+
+        // Instant both ways: 2000 - 1200 = 800.
+        assertEquals(800.0, craft.instantProfit, 1e-6)
+        // Patient both ways: 2600 - 1000 = 1600.
+        assertEquals(1_600.0, craft.orderProfit, 1e-6)
+        // The forge trade: bought outright at 1200, sold on an offer at 2600.
+        assertEquals(1_400.0, craft.forgeProfit, 1e-6)
+    }
+
+    @Test
+    fun `the forge figure sits between the two pure trades`() {
+        // It has to: it takes the better exit and the worse entry, so it can beat neither the
+        // fully patient trade nor lose to the fully hasty one. A figure outside that band would
+        // mean the two sides had been crossed the wrong way round.
+        val craft = price(
+            Recipe("PLATE", 1.0, mapOf("ORE" to 4.0), durationSeconds = 3600),
+            mapOf(
+                "ORE" to quote("ORE", topAsk = 50.0, instantBuy = 90.0),
+                "PLATE" to quote("PLATE", sellPrice = 500.0, topBid = 700.0),
+            ),
+        )!!
+
+        assertTrue(
+            craft.forgeProfit in craft.instantProfit..craft.orderProfit,
+            "forge ${craft.forgeProfit} outside ${craft.instantProfit}..${craft.orderProfit}",
+        )
+    }
+
+    @Test
+    fun `an instant craft keeps the coherent pair, with no mixed trade offered`() {
+        // Without a wait to exploit, buying outright to then queue a sell offer means paying for
+        // speed and handing it straight back - a mistake rather than a strategy. So on a craft
+        // the figure falls back to the patient trade rather than inventing a third column.
+        val craft = price(
+            Recipe("BLOCK", 1.0, mapOf("GEM" to 9.0)),
+            mapOf(
+                "GEM" to quote("GEM", topAsk = 10.0, instantBuy = 30.0),
+                "BLOCK" to quote("BLOCK", sellPrice = 200.0, topBid = 260.0),
+            ),
+        )!!
+
+        assertEquals(craft.orderProfit, craft.forgeProfit, 1e-6)
+    }
+
+    @Test
+    fun `the forge margin is measured against the money that trade puts up`() {
+        // Against the instant cost, since that is what this trade actually pays. Dividing by the
+        // order cost would flatter it by exactly the premium it chose to pay.
+        val craft = price(
+            Recipe("PLATE", 1.0, mapOf("ORE" to 1.0), durationSeconds = 7200),
+            mapOf(
+                "ORE" to quote("ORE", topAsk = 100.0, instantBuy = 200.0),
+                "PLATE" to quote("PLATE", sellPrice = 300.0, topBid = 400.0),
+            ),
+        )!!
+
+        // 400 - 200 = 200 profit on 200 put up.
+        assertEquals(200.0, craft.forgeProfit, 1e-6)
+        assertEquals(100.0, craft.forgeMargin, 1e-6)
     }
 }
