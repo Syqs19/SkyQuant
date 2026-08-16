@@ -83,10 +83,8 @@ one is met.
 - [x] `skyquant` is free as a Modrinth slug (no project, no similar name)
 - [x] Repository linked: [Syqs19/SkyQuant](https://github.com/Syqs19/SkyQuant) — public, issues
       enabled, verified reachable
-- [ ] **Add the `LICENSE` file to the GitHub repository.** It exists in this working copy but the
-      repo reports no licence, so GitHub shows the code as all-rights-reserved — which contradicts
-      the GPL-3.0-or-later declared in `fabric.mod.json` and on the Modrinth page. Modrinth
-      requires metadata consistent with what is found elsewhere
+- [x] Source published and licence recognised — GitHub reports the repository as GPL-3.0,
+      matching `fabric.mod.json`
 - [ ] Point `homepage` at the Modrinth page once it exists (it currently points at the repo, since
       a link that 404s is worse than one that merely duplicates `sources`)
 - [ ] Re-read the official Hypixel rules on allowed modifications —
