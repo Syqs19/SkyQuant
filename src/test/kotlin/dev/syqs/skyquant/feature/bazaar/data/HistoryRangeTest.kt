@@ -78,4 +78,40 @@ class HistoryRangeTest {
         val labels = BazaarHistory.Range.entries.map { it.label }
         assertEquals(labels.size, labels.toSet().size, "duplicate range labels: $labels")
     }
+
+    /**
+     * What a greyed-out button says when hovered.
+     *
+     * The screen used to print one fixed sentence about auctions whatever had been disabled, so a
+     * window ruled out for the other reason was explained with something untrue of it. A wrong
+     * explanation is worse than none, because the reader has no reason to doubt it.
+     */
+    @Test
+    fun `an available window has nothing to explain`() {
+        assertNull(BazaarHistory.Range.DAY.unavailableReason(PriceSeries.Kind.BAZAAR))
+        assertNull(BazaarHistory.Range.MONTH.unavailableReason(PriceSeries.Kind.AUCTION))
+    }
+
+    @Test
+    fun `the hour at auction is explained by how rarely auctions sell`() {
+        val reason = BazaarHistory.Range.HOUR.unavailableReason(PriceSeries.Kind.AUCTION)
+
+        assertTrue(reason != null && reason.contains("often", ignoreCase = true), "was: $reason")
+    }
+
+    @Test
+    fun `a reason names the window it is about`() {
+        // Whatever the wording, it has to be specific enough that a reader can tell which button
+        // it belongs to - the fault being fixed was one sentence standing in for every case.
+        for (kind in listOf(PriceSeries.Kind.BAZAAR, PriceSeries.Kind.AUCTION)) {
+            for (range in BazaarHistory.Range.entries) {
+                val reason = range.unavailableReason(kind) ?: continue
+
+                assertTrue(
+                    reason.isNotBlank() && reason.length in 10..60,
+                    "${range.label} on $kind gave an unusable hint: '$reason'",
+                )
+            }
+        }
+    }
 }

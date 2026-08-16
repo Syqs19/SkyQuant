@@ -149,6 +149,22 @@ object AuctionSellPrice {
         entries[itemId.uppercase()]?.fetchedAtMillis?.let { it > 0 } ?: false
 
     /**
+     * How many answers have arrived, so a page built on these prices can tell whether recomputing
+     * would change anything.
+     *
+     * Needed alongside [BazaarLivePrices.snapshotVersion] rather than instead of it. These arrive
+     * between snapshots, a few per pass, and a cache keyed only on the bazaar's version would
+     * freeze the Craft page for a whole minute while the very prices it is waiting for landed
+     * unnoticed - trading a cost the player can't see for an emptiness they can.
+     *
+     * Counts every answer including "nothing listed": that outcome removes a candidate from the
+     * page just as surely as a price adds one.
+     */
+    @Volatile
+    var answerCount: Long = 0
+        private set
+
+    /**
      * Requests [itemId]'s listings if nothing recent is cached.
      *
      * Safe to call every frame and for every row on screen: an in-flight or recent entry returns
@@ -223,6 +239,8 @@ object AuctionSellPrice {
                         // than only for successful ones: an item with no listings is still work
                         // done, and a page mid-sweep should not claim to be finished.
                         lastAnswerAtMillis = entry.fetchedAtMillis
+                        // After the quote, so a reader seeing the new count finds the new price.
+                        answerCount++
                     }
                     entry.inFlight = false
                     inFlightCount.decrementAndGet()
@@ -244,26 +262,18 @@ object AuctionSellPrice {
 
         return Quote(
             itemId = itemId,
-            price = median(sample),
+            // Median rather than mean, for the reason the sample exists at all: a mean of the four
+            // cheapest is dragged towards a single mispriced one, which is exactly the value being
+            // guarded against. Divan's Drill's 420M would pull a mean of 1.13B down to 869M; the
+            // median ignores it.
+            //
+            // Shared with PriceSeries rather than kept as a second copy. The two differed in a way
+            // that does not show up until someone reuses the wrong one: this file's version assumed
+            // its input was already sorted, which was true only because the one caller happened to
+            // sort first. The shared one sorts for itself and so cannot be called wrongly.
+            price = PriceSeries.median(sample),
             lowest = usable.first(),
             listingCount = usable.size,
         )
-    }
-
-    /**
-     * Median rather than mean, for the reason the sample exists at all: a mean of the four
-     * cheapest is dragged towards a single mispriced one, which is exactly the value being
-     * guarded against. Divan's Drill's 420M would pull a mean of 1.13B down to 869M; the median
-     * ignores it.
-     */
-    private fun median(sorted: List<Double>): Double {
-        if (sorted.isEmpty()) return 0.0
-        val middle = sorted.size / 2
-
-        return if (sorted.size % 2 == 1) {
-            sorted[middle]
-        } else {
-            (sorted[middle - 1] + sorted[middle]) / 2
-        }
     }
 }

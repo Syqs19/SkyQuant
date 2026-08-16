@@ -1,5 +1,8 @@
 package dev.syqs.skyquant.feature.bazaar.data
 
+import dev.syqs.skyquant.util.CoflnetRateLimit
+import dev.syqs.skyquant.util.HttpJson
+import java.util.concurrent.CompletionException
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -85,5 +88,53 @@ class AuctionLivePricesTest {
 
         assertTrue(quote.price > 0.0, "a quiet hour must not zero the price")
         assertEquals(4, quote.soldToday)
+    }
+
+    /**
+     * Which failures may be cached as "this item has nothing".
+     *
+     * The distinction is invisible in the game - a wrongly cached refusal looks exactly like an
+     * item that genuinely never sells - and the cost falls on pinned rows, i.e. the only items
+     * this class ever fetches and the ones the player deliberately chose to watch.
+     */
+    @Test
+    fun `a genuine failure is an answer about the item`() {
+        // No listings, a 404, a malformed body: these really do say the item has nothing to show,
+        // and remembering that is what stops it being asked about every ten minutes forever.
+        assertTrue(AuctionLivePrices.answersTheItem(IllegalStateException("HTTP 404")))
+    }
+
+    @Test
+    fun `a rate limit is not an answer about the item`() {
+        // The server refusing our request rate says nothing about this item.
+        assertTrue(
+            AuctionLivePrices.answersTheItem(HttpJson.RateLimited(retryAfterMillis = 5_000)).not(),
+        )
+    }
+
+    @Test
+    fun `our own pacing is not an answer about the item`() {
+        // The bug this pins down. Deferred means the request was never sent, so caching it marks a
+        // tradeable item "no auction data" for the full thirty-minute miss backoff. It reads as an
+        // ordinary failure - rateLimit() returns null for it - which is exactly why it slipped
+        // through the 429 check and into the generic branch.
+        assertTrue(AuctionLivePrices.answersTheItem(CoflnetRateLimit.Deferred()).not())
+    }
+
+    @Test
+    fun `a refusal still counts as one when the future wrapped it`() {
+        // CompletableFuture hands callers a CompletionException wrapping the real cause, so a
+        // check testing only the top-level type catches one shape and silently misses the other -
+        // which is the whole reason the rateLimit() and deferred() helpers exist.
+        assertTrue(
+            AuctionLivePrices.answersTheItem(
+                CompletionException(CoflnetRateLimit.Deferred()),
+            ).not(),
+        )
+        assertTrue(
+            AuctionLivePrices.answersTheItem(
+                CompletionException(HttpJson.RateLimited(retryAfterMillis = null)),
+            ).not(),
+        )
     }
 }

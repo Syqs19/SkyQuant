@@ -74,6 +74,22 @@ object BazaarHistory {
          */
         fun availableOn(kind: PriceSeries.Kind): Boolean =
             if (kind == PriceSeries.Kind.AUCTION) onAuction else onBazaar
+
+        /**
+         * Why this window isn't offered for [kind], or null when it is.
+         *
+         * Lives here rather than in the screen because this enum is what already knows the answer.
+         * The screen printed one fixed sentence - "No hourly data for auctions" - for whichever
+         * button was greyed out, which is right for the hour at auction and wrong for anything
+         * else the flags can rule out. A hint that explains the wrong thing is worse than none:
+         * it invites the reader to trust it.
+         */
+        fun unavailableReason(kind: PriceSeries.Kind): String? = when {
+            availableOn(kind) -> null
+            kind == PriceSeries.Kind.AUCTION ->
+                "Auctions don't sell often enough for an hourly chart"
+            else -> "No $label of bazaar history is recorded"
+        }
     }
 
     /** One recorded moment. Prices mirror the live API: [buy] is what you'd pay. */

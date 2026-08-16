@@ -238,15 +238,19 @@ class BazaarGraphScreen(
      * Says why a greyed-out range can't be picked, on hover.
      *
      * A disabled control that gives no reason invites the reader to assume the mod is broken.
-     * The reason here is a property of the market, not of the mod: auctions complete too rarely
-     * for an hour of them to be a series, and Coflnet doesn't keep a month of bazaar prices.
+     * The reason is a property of the market, not of the mod: auctions complete too rarely for an
+     * hour of them to be a series, and Coflnet doesn't keep a month of bazaar prices.
+     *
+     * Which of those it is comes from the range itself. This used to print the auction sentence
+     * whatever had been greyed out, so a window unavailable for the other reason was explained
+     * with something that wasn't true of it.
      */
     private fun drawUnavailableHint(graphics: GuiGraphicsExtractor, mouseX: Int, mouseY: Int) {
         val hovered = BazaarHistory.Range.entries.firstOrNull {
             !isAvailable(it) && rangeButtonBounds(it).containsPoint(mouseX, mouseY)
         } ?: return
 
-        val text = "No hourly data for auctions"
+        val text = hovered.unavailableReason(series.kind) ?: return
 
         val box = rangeButtonBounds(hovered)
         val width = font.width(text) + 8

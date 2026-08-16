@@ -1,6 +1,8 @@
 package dev.syqs.skyquant.feature.bazaar.data
 
 import dev.syqs.skyquant.SkyQuantMod
+import dev.syqs.skyquant.util.CoflnetRateLimit
+import dev.syqs.skyquant.util.deferred
 import dev.syqs.skyquant.util.rateLimit
 import java.util.concurrent.ConcurrentHashMap
 
@@ -96,18 +98,15 @@ object AuctionLivePrices {
             var recordAnswer = true
 
             try {
-                if (error?.rateLimit() != null) {
-                    // The back-off itself is registered by AuctionHistory.fetch, which is where
-                    // the response was seen; this only declines to cache the non-answer.
-                    recordAnswer = false
-                    return@whenComplete
-                }
-
                 if (error != null) {
-                    // Debug rather than warn: an item with no auction history is the ordinary
-                    // case here, not a fault worth putting in a player's log at every pin.
-                    SkyQuantMod.LOGGER.debug("Auction price lookup failed for {}", id, error)
-                    entry.quote = null
+                    recordAnswer = answersTheItem(error)
+
+                    if (recordAnswer) {
+                        // Debug rather than warn: an item with no auction history is the ordinary
+                        // case here, not a fault worth putting in a player's log at every pin.
+                        SkyQuantMod.LOGGER.debug("Auction price lookup failed for {}", id, error)
+                        entry.quote = null
+                    }
                     return@whenComplete
                 }
 
@@ -118,6 +117,28 @@ object AuctionLivePrices {
             }
         }
     }
+
+    /**
+     * Whether a failure says anything about *this item*, and may therefore be cached.
+     *
+     * Only two kinds don't. A **429** is the server refusing our request rate, and a
+     * [CoflnetRateLimit.Deferred] is our own pacing declining to send one at all - neither is a
+     * statement about whether the item has auction sales, so recording either as an answer marks
+     * a tradeable item "no data" for the whole thirty-minute miss backoff. Pinned rows are the
+     * only ones this class fetches, so the items it would blank are precisely the ones the player
+     * chose to watch.
+     *
+     * The `Deferred` half is the one that was missing. It reads as an ordinary failure -
+     * `rateLimit()` returns null for it - so it fell into the generic branch and was cached. The
+     * sibling caches never hit it because they check the budget before starting a request and
+     * return early; this one delegates to [AuctionHistory.fetch], which checks it *inside*, so the
+     * refusal comes back as a completed future instead of never starting.
+     *
+     * Extracted and internal because the difference is invisible in the game: a wrongly cached
+     * refusal looks exactly like an item that genuinely has no sales.
+     */
+    internal fun answersTheItem(error: Throwable): Boolean =
+        error.rateLimit() == null && !error.deferred()
 
     /**
      * Reduces a day of hourly sales to the one row the overlay has space for.
