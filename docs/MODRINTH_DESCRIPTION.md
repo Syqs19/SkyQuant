@@ -16,7 +16,7 @@
 
 ## 📊 The terminal
 
-One tabbed screen instead of five browser tabs.
+The game shows you one item at a time, in its own menu. This shows fifty at once, sorted.
 
 | Tab | What it answers |
 |---|---|

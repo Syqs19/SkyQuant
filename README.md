@@ -29,12 +29,15 @@
 
 ## What it's for
 
-SkyBlock's economy is worth reading, and the game gives you almost nothing to read it with. The
-bazaar shows two numbers and no history. The auction house shows what's listed, not what things
-actually sell for. Working out whether a craft is worth it means a spreadsheet, three browser tabs,
-and doing the tax by hand.
+The game already tells you a lot. The bazaar has a chart, an order book and a week of volume; the
+auction house shows recent sales. What it doesn't do is put any of it side by side.
 
-SkyQuant puts that in the game, as one screen you open with a key.
+Every item is its own menu. Comparing two flips means closing one and opening the other. Ranking
+fifty is not on the table. And the figures are gross — the tax comes off when you click, not when
+you're deciding.
+
+SkyQuant reads the same public data and lays it out as one screen: sorted, ranked, and net of what
+you'll actually be charged.
 
 <br>
 
@@ -69,9 +72,11 @@ SkyQuant puts that in the game, as one screen you open with a key.
 
 > ### Every figure is net of tax
 >
-> The mod reads your real Bazaar Flipper rate from the Community Shop menu, so the numbers match
-> what you'll actually be charged. A terminal that shows gross profit is lying to you — on a 500k
-> flip that's 6,250 coins it forgot to mention.
+> SkyQuant reads your real Bazaar Flipper rate from the Community Shop menu, so what you see is
+> what you keep.
+>
+> It matters more than it sounds: on a 500k flip, the tax is 6,250 coins. A profit column that
+> ignores it is quietly wrong on every single row.
 
 <br>
 
@@ -83,37 +88,37 @@ SkyQuant puts that in the game, as one screen you open with a key.
 <tr>
 <td width="33%" valign="top">
 
-#### 🎯 Prices from the book
+#### 🎯 Real prices, not phantom ones
 
-Measured live: one item reported a sell price of **22.7** while the cheapest actual seller wanted
-**7,002**.
+One item showed a sell price of **22.7**. The cheapest seller actually wanted **7,002**.
 
-One abandoned lowball order made it look like the best flip on the bazaar by a factor of ten.
+The gap was a single abandoned order — enough to make it look like the best flip on the bazaar,
+ten times over.
 
-Pricing from the top of the order book removes that whole class of phantom row — no spread ceiling
-needed to paper over it.
-
-</td>
-<td width="33%" valign="top">
-
-#### ⏱ The forge ranks per hour
-
-Tungsten Key makes **259k in thirty seconds**. Gleaming Crystal makes **11.65M in six hours**.
-
-Ranked on profit the crystal wins by 45×. Ranked on the rate, the key wins by 16×.
-
-Only one of those is the advice worth acting on when a forge slot is what you're spending.
+SkyQuant prices from the top of the order book, so that row never appears.
 
 </td>
 <td width="33%" valign="top">
 
-#### 🔍 Thin markets get flagged
+#### ⏱ Forge ranked by the hour
 
-A cheapest listing well below the next one isn't a market price — it's one underpriced item.
+Tungsten Key: **259k in thirty seconds**.
+Gleaming Crystal: **11.65M in six hours**.
 
-Sampled across twelve items, nine sat within 1% of the second cheapest. Daedalus Axe sat at 28.6%.
+By profit, the crystal wins 45×. By the hour, the key wins 16×.
 
-That gap is shown, not hidden: the price is real, it just isn't a going rate.
+A forge slot is time. Ranking it any other way recommends the wrong craft.
+
+</td>
+<td width="33%" valign="top">
+
+#### 🔍 Thin markets, flagged
+
+A cheapest listing far below the next one isn't a price. It's one person underselling.
+
+Across twelve items, nine sat within 1% of the second cheapest. Daedalus Axe sat at **28.6%**.
+
+SkyQuant shows the gap instead of hiding it — the price is real, it just isn't the going rate.
 
 </td>
 </tr>
@@ -234,9 +239,9 @@ the server**. SkyQuant does neither.
 | **Mixins** | **none** — Fabric API events plus a four-line read-only access widener |
 | **Tests** | 310, no game required |
 
-Roughly 11,000 lines of Kotlin. `./gradlew test` runs the lot in a few seconds: everything that
-doesn't touch a Minecraft class is testable, which is a reason to keep the arithmetic away from the
-drawing in the first place.
+Roughly 11,000 lines of Kotlin, and `./gradlew test` covers them in a few seconds. Anything that
+doesn't touch a Minecraft class can be tested without launching the game — which is the reason the
+arithmetic lives apart from the drawing.
 
 <br>
 
@@ -264,32 +269,31 @@ Full map in **[PROJECT_MAP.md](PROJECT_MAP.md)**.
 | [SkyCofl](https://sky.coflnet.com/data) | price history, auction listings, lowest BIN | per chart view |
 | [NEU repository](https://github.com/NotEnoughUpdates/NotEnoughUpdates-REPO) | recipes, NPC shop prices | disk + ETag |
 
-**Nothing is frozen into the jar.** Every source is fetched at runtime, so a Hypixel price patch
-doesn't need a mod release to reach you. Where a source is large or slow-moving it's cached on disk
-and asked "has this changed?" first — which costs a few hundred bytes rather than megabytes.
+**Nothing is baked into the jar.** Everything is fetched at runtime, so when Hypixel patches a shop
+price you get it without waiting for a mod update. Large or slow-moving sources are cached on disk
+and checked with an ETag first — asking "has this changed?" costs a few hundred bytes instead of
+megabytes.
 
-*Prices provided by SkyCofl.* Attribution to SkyCofl and the NEU repository is a **condition of
-their terms**, not a courtesy, and is shown in-game as well as here. The credit lines come from
-`DataCredits` — don't remove them.
+*Prices provided by SkyCofl.* Crediting SkyCofl and the NEU repository is a **condition of their
+terms**, not a courtesy. The lines come from `DataCredits` and appear in-game — don't remove them.
 
-What each source requires, and how each requirement is met, is in
-**[docs/API_RESOURCES.md](docs/API_RESOURCES.md)**.
+Full breakdown of what each source requires in **[docs/API_RESOURCES.md](docs/API_RESOURCES.md)**.
 
 <br>
 
 ## Rate limiting
 
-Coflnet publishes **30 requests per 10 seconds and 100 per minute per IP**, both windows applying
-at once, and an IP that accumulates 500 rate-limit violations is **blocked automatically**. The
-cost of getting this wrong isn't a failed request — it's a player losing access.
+Coflnet allows **30 requests per 10 seconds and 100 per minute**, per IP, both limits at once.
+Break them 500 times and the IP is **blocked automatically** — so the cost of getting this wrong
+isn't a failed chart, it's a player losing access entirely.
 
-`CoflnetRateLimit` therefore counts requests **over time**, shared between every caller. A cap on
-concurrent requests looks like pacing but isn't: four in flight completing in 100ms each is forty
-requests in ten seconds, which is over the line.
+`CoflnetRateLimit` counts requests **over time**, shared by every caller. Capping concurrent
+requests instead looks like pacing but isn't: four at a time, each taking 100ms, is forty requests
+in ten seconds — over the limit.
 
-A `429` is kept distinct from an ordinary failure, because it says nothing about the item that was
-asked for. Treating it as "nothing listed" would cache that answer for a perfectly tradeable item,
-for as long as the failure backoff lasts.
+A `429` is treated as its own kind of failure. It says the *IP* was refused, not that the item has
+no data, and conflating the two would cache "nothing listed" against a perfectly tradeable item
+for the whole backoff period.
 
 <br>
 
@@ -306,22 +310,24 @@ for as long as the failure backoff lasts.
 browser on first launch and remembers you afterwards. Java 25 is required from Minecraft 26.1
 onward; the Gradle toolchain will fetch it if you don't have it.
 
-Fabric API is pulled per-module for the eight modules the mod actually uses, plus the full package
-as `modRuntimeOnly` — development-only mods in `run/mods` routinely declare a hard dependency on
-the `fabric-api` umbrella and refuse to load without it.
+Only the eight Fabric API modules the mod actually uses are on the compile classpath. The full
+package comes in as `modRuntimeOnly`, for the test client alone: development mods dropped in
+`run/mods` often demand the `fabric-api` umbrella and refuse to load without it.
 
-> **Pin Fabric API to the exact patch** (`+26.1.2`, never a generic `+26.1`). Mojang changes
-> internal signatures between patches of the same drop, and a generic build breaks Fabric API's
-> mixins at runtime. This has already cost one debugging round.
+> **Pin Fabric API to the exact patch** — `+26.1.2`, never a bare `+26.1`. Mojang changes internal
+> signatures between patches of the same release, and a generic build breaks Fabric API's mixins at
+> runtime. Learned the hard way.
 
 <br>
 
 ## Licence
 
 **GPL-3.0-or-later.** Bundles [MoulConfig](https://github.com/NotEnoughUpdates/MoulConfig)
-(LGPL-3.0), which includes LibNinePatch (MPL-2.0). Both licences travel inside the jar as
-`LICENSE-SkyQuant.txt` and `LICENSE-MoulConfig.txt` — named so each says whose it is, because a
-bare `LICENSE` at the root of a jar reads as the *mod's* licence.
+(LGPL-3.0), which itself includes LibNinePatch (MPL-2.0).
+
+Both licences ship inside the jar, named `LICENSE-SkyQuant.txt` and `LICENSE-MoulConfig.txt` so
+each says whose it is. A bare `LICENSE` at a jar's root reads as the *mod's* licence — which, when
+it's a dependency's, states the wrong terms to anyone who opens it.
 
 <br>
 
