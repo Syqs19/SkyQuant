@@ -2,6 +2,7 @@ package dev.syqs.skyquant.hud
 
 import com.google.gson.reflect.TypeToken
 import dev.syqs.skyquant.util.JsonFile
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents
 
 /**
  * Every overlay the mod can draw, with where and how large the player put it.
@@ -36,6 +37,20 @@ object HudRegistry {
 
     /** Registered overlays, in registration order. */
     val all: List<HudElement> get() = elements
+
+    /**
+     * Writes placements on shutdown, so a layout survives a route out of the game that never
+     * reaches the editor's own save.
+     *
+     * [store] and [setScale] only touch memory, and [HudEditorScreen.onClose] was the single
+     * caller of [save] - so a crash, an Alt+F4, or quitting with the editor still open lost every
+     * drag since the last clean close. The same backstop the settings already have (see
+     * [dev.syqs.skyquant.config.SkyQuantConfigManager.register]), for the same reason: the state
+     * worth persisting is written by hand, and a hand-made layout is expensive to redo.
+     */
+    fun register() {
+        ClientLifecycleEvents.CLIENT_STOPPING.register { save() }
+    }
 
     fun register(element: HudElement) {
         elements.add(element)

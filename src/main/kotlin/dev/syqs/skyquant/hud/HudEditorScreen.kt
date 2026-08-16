@@ -198,7 +198,6 @@ class HudEditorScreen(
             minecraft.setScreen(HudEditorScreen(minecraft.screen))
         }
 
-
         private const val SNAP_DISTANCE = 6
         private const val RESET_KEY = org.lwjgl.glfw.GLFW.GLFW_KEY_R
     }

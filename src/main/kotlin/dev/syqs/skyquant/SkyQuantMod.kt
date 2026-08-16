@@ -9,6 +9,7 @@ import dev.syqs.skyquant.feature.bazaar.BazaarTaxCalibration
 import dev.syqs.skyquant.feature.bazaar.MarketDataPreload
 import dev.syqs.skyquant.feature.pickaxe.PickaxeAbilityReminder
 import dev.syqs.skyquant.feature.rift.UbikCubeReminder
+import dev.syqs.skyquant.hud.HudRegistry
 import dev.syqs.skyquant.reminder.ReminderTicker
 import net.fabricmc.api.ModInitializer
 import org.slf4j.Logger
@@ -25,6 +26,9 @@ object SkyQuantMod : ModInitializer {
         LOGGER.info("SkyQuant {} starting on Minecraft {}", VERSION, MINECRAFT)
 
         SkyQuantConfigManager.register()
+        // Before anything registers an overlay, so the shutdown save is in place no matter which
+        // route out of the game the player takes.
+        HudRegistry.register()
         ReminderTicker.register()
         UbikCubeReminder.register()
         PickaxeAbilityReminder.register()
