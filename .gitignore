@@ -27,7 +27,10 @@ run/
 .DS_Store
 Thumbs.db
 
-# Local tooling caches, specific to this machine rather than to the project
+# Local tooling: assistant instructions and caches, specific to whoever is working on the
+# project rather than to the project itself
+CLAUDE.md
+.claude/
 .impeccable/
 .mcp.json
 

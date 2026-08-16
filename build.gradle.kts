@@ -70,10 +70,9 @@ dependencies {
     //
     // The modules above are what SkyQuant itself needs, and each registers under its own id
     // ("fabric-lifecycle-events-v1" and so on). Nothing among them is called "fabric-api": that is
-    // the id of the umbrella mod. Development-only mods in run/mods declare a hard dependency on
-    // that umbrella - the MCP inspection server does - so the loader refuses to start with
-    // "requires fabric-api, which is missing" even though every module it actually calls is
-    // present.
+    // the id of the umbrella mod. Development-only mods dropped in run/mods routinely declare a
+    // hard dependency on that umbrella, and the loader then refuses to start with "requires
+    // fabric-api, which is missing" even though every module such a mod actually calls is present.
     //
     // modRuntimeOnly is what keeps this from undoing the choice above: it puts the jar in the
     // test client's mod folder without adding it to the compile classpath, so accidentally
