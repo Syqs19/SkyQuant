@@ -10,6 +10,8 @@
 
 </div>
 
+![The Flip tab, ranking the bazaar by profit](https://raw.githubusercontent.com/Syqs19/SkyQuant/main/docs/assets/screenshots/1-flip-ranking.png)
+
 ---
 
 ## 📊 The terminal
@@ -33,11 +35,23 @@ a sell price of 22.7 while the cheapest actual seller wanted 7,002 — a single 
 made it look like the best flip on the bazaar by a factor of ten. Pricing from the book removes
 that whole class of phantom row.
 
+![The Craft tab, with profits shown net of tax](https://raw.githubusercontent.com/Syqs19/SkyQuant/main/docs/assets/screenshots/4-craft-profit.png)
+
+*The Craft tab. Losses are shown as readily as gains — a page that only ever showed profits would
+be hiding half of what you need to decide.*
+
+![The NPC to Bazaar tab, with each shop's daily stock](https://raw.githubusercontent.com/Syqs19/SkyQuant/main/docs/assets/screenshots/5-npc-to-bazaar.png)
+
+*NPC → Bazaar, with each shop's remaining daily stock — the figure that decides whether a margin
+is worth the trip.*
+
 ---
 
 ## 📈 Price charts
 
 Point at any item in a bazaar or auction menu and press **G**.
+
+![A bazaar price chart with buy and sell curves](https://raw.githubusercontent.com/Syqs19/SkyQuant/main/docs/assets/screenshots/2-bazaar-chart.png)
 
 - **1h · 1d · 7d · 30d** — on both the bazaar *and* the auction house
 - **Buy and sell curves** with the spread between them
@@ -46,9 +60,11 @@ Point at any item in a bazaar or auction menu and press **G**.
 - **A verdict**, not just numbers: the current price against the window's usual, so the chart
   tells you something instead of leaving you to squint at it
 
+![An auction price chart with the lowest-BIN line](https://raw.githubusercontent.com/Syqs19/SkyQuant/main/docs/assets/screenshots/3-auction-chart.png)
+
 Auction items aren't fungible — a well-reforged drill and a bare one sell under the same name — so
 the chart draws a base-price line from the cheapest sale per hour rather than pretending one
-average means anything.
+average means anything. The dashed line is what one costs to buy *right now*.
 
 ---
 
