@@ -1,0 +1,13 @@
+classTweaker v2 official
+
+# Read access to the GUI render state, needed to submit custom geometry (the bazaar
+# price curve): since 1.21.8 GUI rendering is split-phase and non-rectangular shapes
+# have to be added as GuiElementRenderState instead of being drawn directly.
+accessible field net/minecraft/client/gui/GuiGraphicsExtractor guiRenderState Lnet/minecraft/client/renderer/state/gui/GuiRenderState;
+
+# The slot under the cursor, so the bazaar shortcut knows which item is being pointed at.
+accessible field net/minecraft/client/gui/screens/inventory/AbstractContainerScreen hoveredSlot Lnet/minecraft/world/inventory/Slot;
+
+# Container window size, to anchor the bazaar graph button just outside its right edge.
+accessible field net/minecraft/client/gui/screens/inventory/AbstractContainerScreen imageWidth I
+accessible field net/minecraft/client/gui/screens/inventory/AbstractContainerScreen imageHeight I

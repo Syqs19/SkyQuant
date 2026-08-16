@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "id": "${id}",
+  "version": "${version}",
+  "name": "${name}",
+  "description": "A market terminal for Hypixel SkyBlock: live bazaar and auction prices, price history charts, craft and forge profit rankings, and a configurable price HUD. Client-side and informational only - it shows public market data, it does not automate anything. Not an official Minecraft product. Not affiliated with or endorsed by Hypixel or Mojang. Live prices from the Hypixel API; price history and auction listings from SkyCofl (https://sky.coflnet.com/data); recipe and NPC shop data from the NotEnoughUpdates repository (MIT). Bundles MoulConfig (LGPL-3.0), which includes LibNinePatch (MPL-2.0); both licences travel in the jar.",
+  "authors": [
+    "Syqs"
+  ],
+  "contact": {
+    "homepage": "https://github.com/Syqs19/SkyQuant",
+    "sources": "https://github.com/Syqs19/SkyQuant",
+    "issues": "https://github.com/Syqs19/SkyQuant/issues"
+  },
+  "license": "GPL-3.0-or-later",
+  "icon": "assets/skyquant/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "main": [
+      {
+        "adapter": "kotlin",
+        "value": "dev.syqs.skyquant.SkyQuantMod"
+      }
+    ],
+    "modmenu": [
+      {
+        "adapter": "kotlin",
+        "value": "dev.syqs.skyquant.compat.ModMenuIntegration"
+      }
+    ]
+  },
+  "accessWidener": "skyquant.ct",
+  "depends": {
+    "fabricloader": ">=0.17",
+    "minecraft": "${minecraft}",
+    "fabric-language-kotlin": "*"
+  }
+}

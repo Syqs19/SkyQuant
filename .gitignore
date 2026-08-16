@@ -1,0 +1,36 @@
+# Gradle
+.gradle/
+build/
+out/
+.kotlin/
+
+# Stonecutter: version cache, and the per-version working trees it generates from src/
+.stonecutter-cache/
+versions/
+
+# JVM crash logs, dropped in the working directory when the test client dies
+hs_err_pid*.log
+replay_pid*.log
+
+# Minecraft dev run environment (account, worlds, test logs)
+run/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.classpath
+.project
+.settings/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local tooling caches, specific to this machine rather than to the project
+.impeccable/
+.mcp.json
+
+# Local files with API keys/tokens (Hypixel API key, etc.)
+local.properties
+.env

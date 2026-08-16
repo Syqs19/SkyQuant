@@ -1,0 +1,35 @@
+# See https://stonecutter.kikugie.dev/wiki/config/properties#centralized-properties
+mod.id = "skyquant"
+mod.name = "SkyQuant"
+mod.group = "dev.syqs"
+mod.version = "0.1.0"
+
+deps.fabric_loader = "0.19.3"
+deps.fabric_language_kotlin = "1.13.13+kotlin.2.4.10"
+loomx.loom_version = "1.17-SNAPSHOT"
+
+# --- Current version ---
+["26.1.2"]
+# Compatibility range in fabric.mod.json
+mod.mc_compat = "~26.1.2"
+# Versions to mark as compatible on Modrinth/CurseForge
+mod.mc_releases = ["26.1.2"]
+
+# IMPORTANT: use the Fabric API build tagged for the EXACT patch (e.g. "+26.1.2"),
+# not just "+26.1": Mojang changes internal signatures even between patches of the
+# same drop, and a generic "+26.1" build can break Fabric API's mixins at runtime
+# (happened with 0.143.0+26.1 on Minecraft 26.1.2, see crash log from 2026-08-13).
+# Always check https://github.com/FabricMC/fabric-api/releases before a release.
+deps.fabric_api = "0.155.2+26.1.2"
+
+# --- To add a new Minecraft version in the future ---
+# 1. Add the version string in settings.gradle.kts inside stonecutter { create(rootProject) { ... } }
+# 2. Copy the block below, rename the table to the new version and update the values
+#    (compatible fabric_api/fabric_loader versions, mc_compat, mc_releases).
+# 3. Use the "Set active project to ..." Gradle task to switch to the new version and adapt
+#    the code with Stonecutter's //? if / else comments where needed.
+#
+# ["26.2"]
+# mod.mc_compat = "~26.2"
+# mod.mc_releases = ["26.2"]
+# deps.fabric_api = "0.157.0+26.2"
