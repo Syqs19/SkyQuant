@@ -5,6 +5,7 @@ import dev.syqs.skyquant.config.SkyQuantConfigManager
 import dev.syqs.skyquant.feature.bazaar.gui.BazaarGraphScreen
 import dev.syqs.skyquant.feature.bazaar.gui.RoundedRectRenderState
 import dev.syqs.skyquant.gui.Palette
+import dev.syqs.skyquant.util.stripFormatting
 import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.client.gui.navigation.ScreenRectangle
@@ -55,9 +56,6 @@ object BazaarGraphButton {
 
     /** Accent stripe down the left edge, marking the button as the mod's own. */
     private const val ACCENT_EDGE_WIDTH = 2
-
-    /** Menu titles carry `§` colour codes inline, which would break a plain match. */
-    private val FORMATTING = Regex("§[0-9a-fk-orA-FK-OR]")
 
     fun render(screen: AbstractContainerScreen<*>, graphics: GuiGraphicsExtractor, mouseX: Int, mouseY: Int) {
         productOf(screen) ?: return
@@ -227,7 +225,7 @@ object BazaarGraphButton {
      * miss a coloured one.
      */
     fun allowsButton(title: String): Boolean {
-        val plain = title.replace(FORMATTING, "")
+        val plain = title.stripFormatting()
         return EXCLUDED_TITLES.none { plain.contains(it, ignoreCase = true) }
     }
 

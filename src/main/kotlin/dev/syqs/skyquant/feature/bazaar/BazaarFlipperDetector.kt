@@ -1,6 +1,7 @@
 package dev.syqs.skyquant.feature.bazaar
 
 import dev.syqs.skyquant.feature.bazaar.data.BazaarTax
+import dev.syqs.skyquant.util.stripFormatting
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen
 import net.minecraft.core.component.DataComponents
 
@@ -40,7 +41,7 @@ object BazaarFlipperDetector {
             if (stack.isEmpty) continue
 
             val name = stack.hoverName.string
-            if (!strip(name).lowercase().contains(PERK_NAME)) continue
+            if (!name.stripFormatting().lowercase().contains(PERK_NAME)) continue
 
             // `lines()`, not `lines` - the property without parentheses is the record's raw
             // component and compiles just as happily while never yielding the text. That is
@@ -66,8 +67,8 @@ object BazaarFlipperDetector {
         // own terms: the caller in `scan` is not the only one, and a helper that quietly
         // depends on pre-cleaned input is one bad call away from failing in the game while
         // every test passes - which is exactly how the first version of this shipped broken.
-        val name = strip(rawName)
-        val lore = rawLore.map(::strip)
+        val name = rawName.stripFormatting()
+        val lore = rawLore.map { it.stripFormatting() }
 
         statedRate(lore)?.let { return it }
 
@@ -137,14 +138,6 @@ object BazaarFlipperDetector {
         }
         return null
     }
-
-    /**
-     * Removes the section-sign formatting the game carries inline. Without this a numeral reads
-     * as "§dii" and matches nothing.
-     */
-    private fun strip(text: String): String = text.replace(FORMATTING, "")
-
-    private val FORMATTING = Regex("§[0-9a-fk-orA-FK-OR]")
 
     /** The upgrade cannot take the rate below this, so anything lower was misparsed. */
     private const val MIN_PLAUSIBLE_RATE = 0.005

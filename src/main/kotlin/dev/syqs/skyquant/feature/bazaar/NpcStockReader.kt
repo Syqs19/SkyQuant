@@ -1,6 +1,7 @@
 package dev.syqs.skyquant.feature.bazaar
 
 import dev.syqs.skyquant.feature.bazaar.data.NpcDailyLimit
+import dev.syqs.skyquant.util.stripFormatting
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen
 import net.minecraft.core.component.DataComponents
 
@@ -49,7 +50,7 @@ object NpcStockReader {
      * first.
      */
     fun stockFrom(lore: List<String>): Int? {
-        val lines = lore.map { strip(it).lowercase() }
+        val lines = lore.map { it.stripFormatting().lowercase() }
 
         for ((index, line) in lines.withIndex()) {
             // The label and the figure are usually on separate lines - the real tooltip reads
@@ -79,9 +80,4 @@ object NpcStockReader {
         }
         return null
     }
-
-    /** Menu text carries `§` formatting inline, which would break every match above. */
-    private fun strip(text: String): String = text.replace(FORMATTING, "")
-
-    private val FORMATTING = Regex("§[0-9a-fk-orA-FK-OR]")
 }
