@@ -22,7 +22,8 @@ import java.util.concurrent.CompletableFuture
  *
  * Deliberately not `/bazaar`: Hypixel already owns that name, and a client command registered
  * under it shadows the server's, which would break opening the actual bazaar. The terminal lives
- * under the mod's own `/skyquant bazaar`, with `/bloomberg` as a short alias.
+ * under the mod's own `/skyquant bazaar`, reachable as `/sq bazaar` through the short alias
+ * registered alongside it in [dev.syqs.skyquant.config.SkyQuantConfigManager].
  */
 object BazaarGraphCommand {
 
@@ -40,9 +41,9 @@ object BazaarGraphCommand {
             BazaarPriceTrend.record()
         }
 
-        ClientCommandRegistrationCallback.EVENT.register { dispatcher, _ ->
-            dispatcher.register(bazaarBranch("bloomberg"))
-        }
+        // No command is registered here. The bazaar branch is grafted onto `/skyquant` and `/sq`
+        // by SkyQuantConfigManager instead: Brigadier keeps only the last registration of a
+        // literal, so a separate top-level command was the one thing this must not be.
     }
 
     /**

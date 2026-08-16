@@ -109,7 +109,7 @@ class SkyQuantConfig : Config() {
         @Expose
         @ConfigOption(
             name = "Bazaar Home",
-            desc = "Key that opens the bazaar overview with your watchlist. Also /bloomberg.",
+            desc = "Key that opens the market terminal with your watchlist. Also /skyquant.",
         )
         @ConfigEditorKeybind(defaultKey = GLFW.GLFW_KEY_B)
         @JvmField
