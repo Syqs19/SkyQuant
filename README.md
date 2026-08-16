@@ -61,11 +61,22 @@ Stated plainly because it is what a reviewer, and Hypixel's rules, will want to 
   tooltips for two figures no API carries — the player's bazaar tax and an NPC shop's remaining
   stock — both of which are already on screen when it reads them.
 - **Does not**: automate any action, place or cancel orders, click, move, or play for the player.
-  No solvers, no macros, no ESP, no reading of state the player cannot already see.
+  No solvers, no macros, no ESP, no reading of state the player cannot already see. It does not
+  touch packets — it is client-side only, and every request it makes is a plain HTTP GET to a
+  public API.
+- **Sends nothing about you**: no account name, no UUID, no profile data leaves the client. The
+  requests carry item ids and nothing else.
 
 Every figure it shows is obtainable by anyone with a browser at
 [sky.coflnet.com](https://sky.coflnet.com/data) or Hypixel's own public API, so it is not an
 advantage that depends on having the mod.
+
+Hypixel does not approve or certify individual mods, and its
+[allowed-modifications page](https://support.hypixel.net/hc/en-us/articles/6472550754962-Hypixel-Allowed-Modifications)
+lists categories rather than naming mods — so, as with every SkyBlock mod, using this one is at
+your own risk. The two rules it states in absolute terms are the ones that matter most here, and
+SkyQuant is on the right side of both: nothing is automated, and the client's communication with
+the server is untouched.
 
 Attribution is a condition of use for SkyCofl and NEU, not a courtesy — see
 [docs/API_RESOURCES.md](docs/API_RESOURCES.md) for what each source requires and how it is met.
@@ -87,6 +98,10 @@ one is met.
       matching `fabric.mod.json`
 - [ ] Point `homepage` at the Modrinth page once it exists (it currently points at the repo, since
       a link that 404s is worse than one that merely duplicates `sources`)
-- [ ] Re-read the official Hypixel rules on allowed modifications —
-      [support.hypixel.net](https://support.hypixel.net/hc/en-us/articles/6472550754962-Hypixel-Allowed-Modifications)
-      (the page blocks automated fetching, so this one has to be read by hand)
+- [x] Hypixel's allowed-modifications page read in full. It is an allow-list of four categories -
+      performance, aesthetic, cosmetic HUD, brightness - and states that anything outside them is
+      "disallowed by default". Read literally that excludes every SkyBlock information mod, NEU and
+      SkyHanni included, none of which fit those categories either. What the page states
+      *absolutely* is that automation and any change to client-server communication are banned, and
+      SkyQuant does neither. The position is the same one the established mods occupy, and the
+      README says so rather than implying an approval nobody has
