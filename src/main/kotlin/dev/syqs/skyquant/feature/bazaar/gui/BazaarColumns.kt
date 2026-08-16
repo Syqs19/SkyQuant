@@ -28,18 +28,17 @@ object BazaarColumns {
         return listOf(
             DataTable.Column("", PIN, numeric = false, markerColumn = true),
             DataTable.Column("Item", (width - fixed).coerceAtLeast(60), numeric = false),
-            DataTable.Column("Buy", PRICE, description = "What you pay to buy this item instantly."),
-            DataTable.Column("Sell", PRICE, description = "What you receive selling it instantly."),
+            DataTable.Column("Buy", PRICE, description = "What an instant buy costs."),
+            DataTable.Column("Sell", PRICE, description = "What an instant sell pays."),
             DataTable.Column(
                 changeTitle,
                 CHANGE,
-                description = "How the buy price moved over the session so far.",
+                description = "How the buy price moved this session.",
             ),
             DataTable.Column(
                 "Spread",
                 SPREAD,
-                description = "Gap between buy and sell, as a share of the buy price. " +
-                    "The margin a flip has to work with.",
+                description = "Gap between buy and sell, as a share of the buy price.",
             ),
         )
     }
@@ -48,6 +47,12 @@ object BazaarColumns {
      * The order-to-order flip, which is the trade people actually make: place a buy order, wait,
      * place a sell offer, wait. Instant prices are gone from this view - crossing the spread twice
      * clears almost nothing, so ranking by it flattered items nobody could profit from.
+     *
+     * Two columns here measure liquidity and are easy to confuse. Depth is what the book holds
+     * right now, counted across everything within 1% of the best price rather than the units
+     * sitting exactly at it: the question a trader has is "how much can I move", not "how much is
+     * at the front of the queue". Vol 7d is the other half - how fast the book refills - because a
+     * wide margin on a thin market is a position that cannot be closed.
      */
     fun flips(width: Int): List<DataTable.Column> {
         val fixed = PIN + PRICE * 3 + SPREAD + VOLUME * 2
@@ -58,42 +63,36 @@ object BazaarColumns {
             DataTable.Column(
                 "Buy @",
                 PRICE,
-                description = "Where your buy order has to sit to compete: the cheapest price " +
-                    "anyone is currently asking.",
+                description = "What your buy order has to beat: the cheapest anyone is asking.",
             ),
             DataTable.Column(
                 "Sell @",
                 PRICE,
-                description = "Where your sell offer fills: the best price anyone is currently bidding.",
+                description = "What your sell offer has to beat: the best anyone is bidding.",
             ),
             DataTable.Column(
                 "Profit",
                 PRICE,
-                description = "Coins kept per unit after the bazaar's cut on the sale.",
+                description = "Coins kept per unit, after tax.",
                 sortKey = BazaarSort.PROFIT,
             ),
             DataTable.Column(
                 "Margin",
                 SPREAD,
-                description = "Profit against what it costs to get in. Ranks cheap and expensive " +
-                    "items on equal terms.",
+                description = "Profit as a share of what you put in.",
                 sortKey = BazaarSort.MARGIN,
             ),
             DataTable.Column(
                 "Depth",
                 VOLUME,
-                description = "How many units this flip could actually be done in, whichever " +
-                    "side is thinner. Counts the whole order book within 1% of the best price, " +
-                    "not just the units at it - so it answers \"how much can I trade\" rather " +
-                    "than \"how much sits at the front of the queue\".",
+                description = "Units you can trade before moving the price. " +
+                    "The thinner side of the book, within 1% of the best.",
                 sortKey = BazaarSort.DEPTH,
             ),
             DataTable.Column(
                 "Vol 7d",
                 VOLUME,
-                description = "Units traded this week. A wide margin on a thin market is a " +
-                    "position you can't get out of - and unlike Depth, which is what the book " +
-                    "holds right now, this says how quickly it refills.",
+                description = "Units traded this week. How fast the market refills.",
                 sortKey = BazaarSort.WEEKLY_VOLUME,
             ),
         )
@@ -104,9 +103,15 @@ object BazaarColumns {
      *
      * [forge] adds the per-hour figure and drops the margin. That is not a space compromise but a
      * reading of the trade: a percentage of the money put up says nothing about what a forge slot
-     * is worth, since two recipes with the same margin can differ tenfold per hour. It also keeps
-     * the name column wide enough - with every figure given a place the arithmetic left it 32px
-     * short of the longest item name.
+     * is worth, since two recipes with the same margin can differ tenfold per hour - durations run
+     * from 30 seconds to a week, and a 30-second recipe making 259k beats a 6-hour one making
+     * 11.65M. It also keeps the name column wide enough - with every figure given a place the
+     * arithmetic left it 32px short of the longest item name.
+     *
+     * Both pages carry the fast trade and the patient one side by side because several recipes
+     * lose money one way and make it the other, which no single column could show. On Cost the two
+     * are identical for most items, but cheap raw materials can be several times dearer bought
+     * outright - gravel is nineteen times.
      */
     fun crafts(width: Int, forge: Boolean): List<DataTable.Column> {
         // Every figure column holds a pair, so the whole table reads on one convention: left of
@@ -118,23 +123,23 @@ object BazaarColumns {
         // Repeated in each description rather than stated once: a tooltip is read on its own, and
         // a reader hovering "Profit" has no reason to have hovered "Cost" first.
         //
+        // Named after the four bazaar buttons rather than described as fast and patient: the
+        // reader is about to press one of them, and "instant buy" needs no translating.
+        //
         // The two pages pair different trades, so they need different notes. On the Craft page the
         // pair is speed against patience, both ways through. On the Forge page the left figure
-        // buys outright and *still* sells on an offer, because the recipe's own wait - a median of
+        // instant-buys but *still* sells on an offer, because the recipe's own wait - a median of
         // six hours - makes the minutes a sell offer takes irrelevant, while a buy order that has
         // to fill delays the only scarce thing there is: the slot starting.
         val pairNote = if (forge) {
-            " Left of the slash: ingredients bought outright so the slot starts now, result sold " +
-                "on an offer. Right: a buy order for the ingredients too, cheaper but the forge " +
-                "waits."
+            " Left: instant buy, sell offer. Right: buy order, sell offer."
         } else {
-            " Left of the slash: buy outright and sell into the bids, done in a minute. " +
-                "Right: a buy order and a sell offer, cheaper and slower."
+            " Left: instant buy, instant sell. Right: buy order, sell offer."
         }
 
         // The cost column is about the ingredients alone, so its pairing is the same on both
         // pages - outright against ordered - whatever the profit columns go on to do with them.
-        val costNote = " Left of the slash: bought outright. Right: bought on orders."
+        val costNote = " Left: instant buy. Right: buy order."
 
         return buildList {
             add(DataTable.Column("", PIN, markerColumn = true))
@@ -143,20 +148,18 @@ object BazaarColumns {
                     "Item",
                     nameWidth,
                     numeric = false,
-                    description = "What the recipe makes, and how many one craft yields. " +
-                        "\"AH\" means the price comes from the auction house - the median of the " +
-                        "four cheapest listings, an estimate of what yours would fetch rather " +
-                        "than a standing bid. \"!\" beside it means the cheapest listing sits far " +
-                        "below the others, so that market is thin.",
+                    // "AH" marks an auction-house price: the median of the four cheapest listings,
+                    // an estimate of what yours would fetch rather than a standing bid. "!" means
+                    // the cheapest listing sits far below the others, so that market is thin.
+                    description = "What the recipe makes, and how many per craft. " +
+                        "\"AH\" sells on the auction house, \"!\" few listings.",
                 ),
             )
             add(
                 DataTable.Column(
                     "Cost",
                     PAIRED,
-                    description = "What the ingredients cost." + costNote +
-                        " For most items the two are identical, but cheap raw materials can be " +
-                        "several times dearer bought outright - gravel is nineteen times.",
+                    description = "What the ingredients cost." + costNote,
                     sortKey = BazaarSort.COST,
                 ),
             )
@@ -164,14 +167,7 @@ object BazaarColumns {
                 DataTable.Column(
                     "Profit",
                     PAIRED,
-                    description = "Coins kept per craft, after the bazaar's cut on the sale." +
-                        pairNote +
-                        if (forge) {
-                            " The gap between the two is what starting sooner costs you."
-                        } else {
-                            " Several recipes lose money the fast way and make it the slow way, " +
-                                "which is why both are here."
-                        },
+                    description = "Coins kept per craft, after tax." + pairNote,
                     sortKey = BazaarSort.ORDER_PROFIT,
                 ),
             )
@@ -180,10 +176,7 @@ object BazaarColumns {
                     DataTable.Column(
                         "Per hour",
                         PAIRED,
-                        description = "Profit spread over the time the slot is busy - the only " +
-                            "fair way to rank a forge recipe, since durations run from 30 seconds " +
-                            "to a week. A 30-second recipe making 259k beats a 6-hour one making " +
-                            "11.65M." + pairNote,
+                        description = "Profit per hour of forge time." + pairNote,
                         sortKey = BazaarSort.PER_HOUR,
                     ),
                 )
@@ -192,8 +185,7 @@ object BazaarColumns {
                     DataTable.Column(
                         "Margin",
                         MARGIN,
-                        description = "Profit against the money that trade puts up, so cheap and " +
-                            "expensive recipes rank on equal terms." + pairNote,
+                        description = "Profit as a share of what you put in." + pairNote,
                         sortKey = BazaarSort.MARGIN,
                     ),
                 )
@@ -202,8 +194,8 @@ object BazaarColumns {
                 DataTable.Column(
                     "Vol 7d",
                     VOLUME,
-                    description = "Weekly volume of the scarcest ingredient - the one that caps " +
-                        "how often this can actually be run.",
+                    description = "Weekly volume of the scarcest ingredient - " +
+                        "what caps how often you can run this.",
                     sortKey = BazaarSort.WEEKLY_VOLUME,
                 ),
             )
@@ -214,11 +206,11 @@ object BazaarColumns {
     fun npcToBazaar(width: Int): List<DataTable.Column> = npcFlips(
         width,
         costTitle = "Cost",
-        costDescription = "What the NPC charges per unit. A fixed shop price, not a market.",
+        costDescription = "What the NPC charges. A fixed price, not a market.",
         instantTitle = "Now",
-        instantDescription = "Profit selling instantly into the bazaar, after tax. Certain, but smaller.",
+        instantDescription = "Profit with an instant sell, after tax.",
         orderTitle = "Offer",
-        orderDescription = "Profit from a sell offer, after tax. Larger, but only once someone buys.",
+        orderDescription = "Profit with a sell offer, after tax. Fills once someone buys.",
         // Buying from a shop: 640 units a day, and that cap is the whole shape of this trade.
         stockLimited = true,
     )
@@ -227,11 +219,11 @@ object BazaarColumns {
     fun bazaarToNpc(width: Int): List<DataTable.Column> = npcFlips(
         width,
         costTitle = "Buy",
-        costDescription = "What you pay buying instantly on the bazaar.",
+        costDescription = "What an instant buy costs on the bazaar.",
         instantTitle = "Now",
-        instantDescription = "Profit buying instantly and selling to the shop. No bazaar tax applies.",
+        instantDescription = "Profit with an instant buy, then selling to the shop. No tax.",
         orderTitle = "Order",
-        orderDescription = "Profit if a buy order fills at the lower price first. Cheaper, but you wait.",
+        orderDescription = "Profit if a buy order fills first. Cheaper, but you wait for it.",
         // Buying on the bazaar and selling to a shop: neither side has a daily stock.
         stockLimited = false,
     )
@@ -288,12 +280,11 @@ object BazaarColumns {
                 DataTable.Column(
                     "Profit",
                     NPC_TOTAL,
-                    description = "A day's profit both ways round: $instantTitle then $orderTitle, " +
-                        "each times the whole stock. The Stock column says how many units that is " +
-                        "and where the number came from. " +
+                    description = "A day's profit: $instantTitle then $orderTitle, each times " +
+                        "the whole stock. " +
                         (
                             if (NpcDailyLimit.default > NpcDailyLimit.STANDARD) {
-                                "Mayor Diaz's tenfold limit is switched on in the settings."
+                                "Mayor Diaz's tenfold limit is on."
                             } else {
                                 "Turn on Mayor Diaz in the settings while he is in office."
                             }
@@ -306,9 +297,8 @@ object BazaarColumns {
                     "Stock",
                     NPC_STOCK,
                     numeric = false,
-                    description = "Units per shop behind the total. ○ is the assumed daily limit; " +
-                        "■ is what a shop's own stock line said, which is what is left today. " +
-                        "×2 means two shops sell it, each with separate stock.",
+                    description = "Units per shop behind the total. " +
+                        "○ assumed daily limit, ■ what the shop says is left, ×2 two shops.",
                 ),
             )
         }

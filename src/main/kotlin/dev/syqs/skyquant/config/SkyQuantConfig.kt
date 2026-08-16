@@ -118,9 +118,9 @@ class SkyQuantConfig : Config() {
         @Expose
         @ConfigOption(
             name = "Bazaar Tax",
-            desc = "The bazaar keeps 1.25% of every sale, less 0.125% per Bazaar Flipper level.\n" +
-                "§7Detect automatically§r reads the rate off the Bazaar Flipper entry the next time " +
-                "you open the Community Shop, and assumes 1.25% until then.",
+            desc = "The cut taken off every sale, which your Bazaar Flipper level lowers.\n" +
+                "§7Detect automatically§r reads it from the Community Shop next time you open it, " +
+                "and assumes 1.25% until then.",
         )
         @ConfigEditorDropdown
         @JvmField
