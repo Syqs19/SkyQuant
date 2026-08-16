@@ -66,18 +66,21 @@ object NpcDailyLimit {
     @Volatile
     private var stock: Map<String, Int> = emptyMap()
 
+    /**
+     * Volatile alongside [stock], because the two are read from different threads.
+     *
+     * [forProduct] and [isKnown] are called while a row is drawn, i.e. on the render thread, while
+     * [recordStock] runs from the screen-event callback that scans an open shop. Without this,
+     * one thread could see `loaded = true` before the other's write to [stock] became visible and
+     * read an empty map - reporting the assumed 640 for an item whose real stock had just been
+     * read off the shop, which is the one case this class exists to improve on.
+     */
+    @Volatile
     private var loaded = false
 
     /** The default when a shop hasn't been seen, Diaz included. */
     val default: Int
         get() = STANDARD * if (shoppingSpree) SHOPPING_SPREE_MULTIPLIER else 1
-
-    /** True once at least one shop has been read, so screens can say where the figure came from. */
-    val hasReadings: Boolean
-        get() {
-            ensureLoaded()
-            return stock.isNotEmpty()
-        }
 
     /**
      * Units buyable for [productId] in a day - what the shop said if it has ever been open,
@@ -102,7 +105,13 @@ object NpcDailyLimit {
     /**
      * Records what a shop entry stated. Ignored when unchanged, so this can be called every
      * frame a shop is open without rewriting the file each time.
+     *
+     * Synchronised because it is a read-modify-write on [stock]: the map is replaced rather than
+     * mutated, so two entries recorded at once would each build their new map from the same
+     * starting point and the second would drop the first. A shop window holds dozens of items and
+     * they are scanned in one pass, which is exactly when that collision is likely.
      */
+    @Synchronized
     fun recordStock(productId: String, units: Int) {
         ensureLoaded()
         val id = productId.uppercase()
@@ -124,9 +133,16 @@ object NpcDailyLimit {
     private val shoppingSpree: Boolean
         get() = SkyQuantConfigManager.config.bazaar.shoppingSpree
 
+    /**
+     * Reads the file once, on whichever thread asks first.
+     *
+     * Synchronised and with the flag set *after* the load, not before: the earlier version marked
+     * itself loaded first, so a second thread arriving mid-read returned immediately and used the
+     * empty map as though it were the answer.
+     */
+    @Synchronized
     private fun ensureLoaded() {
         if (loaded) return
-        loaded = true
 
         val saved = file.load()
 
@@ -134,6 +150,7 @@ object NpcDailyLimit {
         // rather than shown, since a stale figure marked as "read from the shop" is worse than
         // the honest default - it invites more trust than the assumed number, not less.
         stock = if (saved.day == currentDay()) saved.stock else emptyMap()
+        loaded = true
     }
 
     /** Reset for tests, which must not inherit readings left behind by another test. */

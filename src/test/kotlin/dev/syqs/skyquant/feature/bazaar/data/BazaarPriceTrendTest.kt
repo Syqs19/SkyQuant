@@ -114,4 +114,30 @@ class BazaarPriceTrendTest {
         assertNull(BazaarPriceTrend.changePercentFor("NEVER_SEEN"))
         assertTrue(BazaarPriceTrend.seriesFor("NEVER_SEEN").isEmpty())
     }
+
+    @Test
+    fun `a lower-case id from the API is still found by its upper-case key`() {
+        // Every reader looks products up upper-cased, so recording under whatever case the
+        // snapshot happened to use would file a product where nobody looks for it - a change
+        // column that stays blank with no way to tell it apart from "not enough history yet".
+        // The existing case test only exercises the *reading* side.
+        BazaarPriceTrend.record(listOf(quote(100.0, id = "enchanted_diamond")), now = start)
+        BazaarPriceTrend.record(listOf(quote(150.0, id = "enchanted_diamond")), now = start + 5 * minute)
+
+        assertEquals(50.0, BazaarPriceTrend.changePercentFor("ENCHANTED_DIAMOND")!!, 1e-9)
+    }
+
+    @Test
+    fun `history stays bounded however long the session runs`() {
+        // This holds every product on the bazaar, not just the followed ones, and runs for as long
+        // as the client does. Samples expiring out of the window is what keeps a day-long session
+        // from growing without limit - the window is an hour at one sample a minute, so a product
+        // can never hold more than about sixty.
+        repeat(600) { BazaarPriceTrend.record(listOf(quote(100.0 + it)), now = start + it * minute) }
+
+        val held = BazaarPriceTrend.sampleCountForTest("ENCHANTED_DIAMOND")
+
+        assertTrue(held <= 61, "ten hours of recording left $held samples for one product")
+        assertTrue(held > 1, "the window trimmed everything, leaving no trend to report")
+    }
 }

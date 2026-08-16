@@ -39,6 +39,9 @@ object BazaarTax {
     @Volatile
     private var detectedRate: Double? = null
 
+    /** Volatile alongside [detectedRate], for the reason given in [NpcDailyLimit]: the rate is
+     * read while rows are drawn and written from the screen-event scan of the Community Shop. */
+    @Volatile
     private var loaded = false
 
     /** The rate read from the Community Shop, or null if it has never been opened. */
@@ -68,20 +71,14 @@ object BazaarTax {
     val isFromSetting: Boolean
         get() = SkyQuantConfigManager.config.bazaar.taxOverride != TaxOverride.AUTOMATIC
 
-    /** True while the rate is the assumed default, i.e. nothing is known yet. */
-    val isAssumed: Boolean
-        get() = !isFromSetting && knownRate == null
-
     fun rateForLevel(level: Int): Float =
         (BASE_RATE - REDUCTION_PER_LEVEL * level.coerceIn(0, MAX_LEVEL)).toFloat()
-
-    /** Coins kept from a bazaar sale of [amount], after the cut. */
-    fun netFromSale(amount: Double): Double = amount * (1 - rate)
 
     /**
      * Records the rate read from the Community Shop. Ignored if unchanged, so this can be
      * called every frame the menu is open without rewriting the file each time.
      */
+    @Synchronized
     fun recordDetectedRate(newRate: Double) {
         ensureLoaded()
         if (detectedRate != null && kotlin.math.abs(detectedRate!! - newRate) < 1e-9) return
@@ -91,10 +88,12 @@ object BazaarTax {
         SkyQuantMod.LOGGER.info("Bazaar tax rate detected: {}%", newRate * 100)
     }
 
+    /** Loaded once, with the flag set after the read - see [NpcDailyLimit.ensureLoaded]. */
+    @Synchronized
     private fun ensureLoaded() {
         if (loaded) return
-        loaded = true
         detectedRate = file.load().detectedRate
+        loaded = true
     }
 
     /** Reset for tests, which must not inherit a rate left behind by another test. */
