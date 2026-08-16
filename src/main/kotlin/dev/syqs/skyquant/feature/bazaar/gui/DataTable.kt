@@ -214,11 +214,24 @@ class DataTable(
         return null
     }
 
-    private fun columnLeft(index: Int): Int {
+    /**
+     * Left edge of each column, accumulated once when the table is built.
+     *
+     * This used to be a loop summing the widths before [index] on every call, which is quadratic
+     * in the column count - and it is called for each cell of each row, so an eight-column table
+     * of twenty rows walked ~57,000 column widths a second at 60fps to arrive at numbers that
+     * never change. A table is rebuilt each frame, so the array is too, but building it is one
+     * pass rather than one pass per cell.
+     */
+    private val columnLefts: IntArray = IntArray(columns.size).also { lefts ->
         var left = x
-        for (i in 0 until index) left += columns[i].width
-        return left
+        for (index in columns.indices) {
+            lefts[index] = left
+            left += columns[index].width
+        }
     }
+
+    private fun columnLeft(index: Int): Int = columnLefts[index]
 
     /** Left edge for the text itself: flush left for names, flush right for figures. */
     private fun textX(font: Font, index: Int, text: String, numeric: Boolean): Int {

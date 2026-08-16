@@ -408,4 +408,44 @@ class PriceSeriesTest {
 
         assertTrue(series.bandTop(0) >= series.bandBottom(0))
     }
+
+    @Test
+    fun `repeated summaries agree, since the graph screen asks three times a frame`() {
+        // The figures are cached now: the side panel, the verdict row and the change figure each
+        // call summarize() on the same series, and recomputing was measured at 42us a time. What
+        // caching must not do is change the answer, so the cheap guard is that it doesn't.
+        val series = PriceSeries.ofAuction(
+            listOf(
+                auction(min = 300.0, max = 500.0, avg = 400.0, volume = 6),
+                auction(min = 320.0, max = 520.0, avg = 420.0, volume = 3),
+                auction(min = 280.0, max = 480.0, avg = 380.0, volume = 9),
+            ),
+        )
+
+        val first = series.summarize()!!
+        val second = series.summarize()!!
+
+        assertEquals(first.low, second.low, 1e-9)
+        assertEquals(first.high, second.high, 1e-9)
+        assertEquals(first.average, second.average, 1e-9)
+        assertEquals(first.usual, second.usual, 1e-9)
+        assertEquals(first.changePercent, second.changePercent, 1e-9)
+        assertEquals(first.totalVolume, second.totalVolume)
+    }
+
+    @Test
+    fun `two series with the same shape summarise independently`() {
+        // A cache held on the wrong scope - shared between instances rather than per series -
+        // would answer one item's panel with another item's figures. The failure would look like
+        // the chart and the panel disagreeing, which reads as a rendering fault rather than a
+        // caching one.
+        val cheap = PriceSeries.ofAuction(listOf(auction(min = 100.0, max = 200.0, avg = 150.0, volume = 4)))
+        val dear = PriceSeries.ofAuction(listOf(auction(min = 900.0, max = 1_100.0, avg = 1_000.0, volume = 4)))
+
+        assertEquals(150.0, cheap.summarize()!!.latest, 1e-9)
+        assertEquals(1_000.0, dear.summarize()!!.latest, 1e-9)
+        // Asked again in the other order, in case the first read populated something shared.
+        assertEquals(1_000.0, dear.summarize()!!.latest, 1e-9)
+        assertEquals(150.0, cheap.summarize()!!.latest, 1e-9)
+    }
 }

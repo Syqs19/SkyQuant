@@ -244,7 +244,25 @@ data class PriceSeries(
         val usual: Double,
     )
 
-    fun summarize(): Summary? {
+    /**
+     * The window's figures, computed once per series.
+     *
+     * Cached because the graph screen asks three times per frame - the side panel, the verdict row
+     * and the change figure each call [summarize] independently - and every call walks the points
+     * several times over, including a sort inside [median]. The series is immutable, so the answer
+     * cannot change between those calls; recomputing it was work with no possible effect.
+     *
+     * `by lazy` rather than a field assigned in the constructor: most series are never summarised
+     * at all - the overlay's sparkline and the chart's own drawing don't need it - so paying for it
+     * eagerly would move the cost rather than remove it. [basePrices] is cached the same way and
+     * for the same reason.
+     */
+    private val summary: Summary? by lazy { computeSummary() }
+
+    /** The cached figures. See [summary] for why this is worth not recomputing. */
+    fun summarize(): Summary? = summary
+
+    private fun computeSummary(): Summary? {
         if (points.isEmpty()) return null
 
         // Weighting alone already excludes hours with no sales - they contribute a weight of

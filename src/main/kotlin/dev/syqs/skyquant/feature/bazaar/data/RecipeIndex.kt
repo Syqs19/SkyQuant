@@ -49,8 +49,31 @@ object RecipeIndex {
 
     private val file = JsonFile.of("recipes", { Cache() })
 
+    /**
+     * The two lists, split once when [recipes] is replaced rather than on every call.
+     *
+     * Both are read from `extractRenderState`, i.e. once per frame, and each call used to run a
+     * `filter` over all 2528 recipes and allocate a fresh list for the result. Splitting on write
+     * happens twice a session; splitting on read happened a hundred times a second.
+     *
+     * Holding them also gives each list a **stable identity**, which is what lets [CraftSummary]
+     * tell "the live recipe index" apart from a list a test handed it - a cached ranking must
+     * never answer a question asked about different inputs.
+     *
+     * Declared before [recipes] on purpose: the setter below writes to it, and a property
+     * initialised later would overwrite that first split with an empty pair.
+     */
+    @Volatile
+    private var split: Pair<List<Recipe>, List<Recipe>> = emptyList<Recipe>() to emptyList()
+
     @Volatile
     private var recipes: List<Recipe> = emptyList()
+        set(value) {
+            field = value
+            // Kept in step with the list itself, so the two can never disagree about what is a
+            // forge recipe - and so no caller has to remember to re-split after assigning.
+            split = value.filter { !it.isForge } to value.filter { it.isForge }
+        }
 
     @Volatile
     private var etag: String? = null
@@ -62,10 +85,20 @@ object RecipeIndex {
     val size: Int get() = recipes.size
 
     /** Every crafting recipe, i.e. the ones that complete instantly. */
-    fun craftingRecipes(): List<Recipe> = recipes.filter { !it.isForge }
+    fun craftingRecipes(): List<Recipe> = split.first
 
     /** Every forge recipe, each occupying a slot for its own duration. */
-    fun forgeRecipes(): List<Recipe> = recipes.filter { it.isForge }
+    fun forgeRecipes(): List<Recipe> = split.second
+
+    /**
+     * Puts an index in place without a network, so the split can be tested.
+     *
+     * Tests must pass `emptyList()` afterwards: this is shared mutable state on an object, and an
+     * index left behind would reach whichever test ran next.
+     */
+    internal fun loadForTest(entries: List<Recipe>) {
+        recipes = entries
+    }
 
     /**
      * Loads the cached index and checks GitHub for a newer one on a background thread.

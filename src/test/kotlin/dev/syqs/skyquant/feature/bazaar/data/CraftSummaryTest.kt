@@ -25,6 +25,7 @@ class CraftSummaryTest {
         instantCost = cost,
         instantProfit = profit,
         orderProfit = profit,
+        forgeProfit = profit,
         durationSeconds = duration,
         weeklyVolume = volume,
     )
@@ -155,5 +156,84 @@ class CraftSummaryTest {
         // beat it and must not be ruled out; one costing 100k cannot and should be.
         assertTrue(2_000_000.0 >= bar, "a dearer candidate stays in play")
         assertTrue(100_000.0 < bar, "a cheap one cannot reach the page")
+    }
+
+    /**
+     * The caching, which exists because these lists are asked for once per *frame* while the
+     * answer changes about once a minute. Measured at 146us a pass over 2528 recipes - half a
+     * 16.7ms frame's budget, spent rebuilding a list identical to the one on screen.
+     *
+     * What matters in these is not the speed but that caching cannot change *what* is shown: a
+     * ranking served after the market moved would be a stale page that looks live, which is worse
+     * than a slow one.
+     */
+    @Test
+    fun `a caller supplying its own recipes is never answered from the cache`() {
+        // The guard the other tests in this file depend on: they pass explicit lists, and a cache
+        // keyed loosely enough to serve them would have one test's ranking answer the next.
+        val first = listOf(recipe("ALPHA"))
+        val second = listOf(recipe("BETA"))
+
+        val alpha = CraftSummary.crafts(first) { craft("ALPHA", 1_000.0) }
+        val beta = CraftSummary.crafts(second) { craft("BETA", 2_000.0) }
+
+        assertEquals(listOf("ALPHA"), alpha.map { it.outputId })
+        assertEquals(listOf("BETA"), beta.map { it.outputId })
+    }
+
+    @Test
+    fun `pricing is re-run for an explicit list even when nothing about the market moved`() {
+        // Same list, different prices, no snapshot in between - a cache that keyed only on the
+        // market would hand back the first answer and the second pricing would never be seen.
+        val recipes = listOf(recipe("MOVER"))
+
+        val cheap = CraftSummary.crafts(recipes) { craft("MOVER", 500.0) }
+        val dear = CraftSummary.crafts(recipes) { craft("MOVER", 90_000.0) }
+
+        assertEquals(500.0, cheap.single().orderProfit)
+        assertEquals(90_000.0, dear.single().orderProfit)
+    }
+
+    @Test
+    fun `the live lists keep a stable identity, which is what the cache keys on`() {
+        // RecipeIndex used to filter on every call and hand back a fresh list each time, so the
+        // cache's identity check could never hold and it would have missed forever - leaving the
+        // per-frame cost exactly where it was while looking fixed.
+        //
+        // Asserted on the same call twice rather than on a loaded index, which needs a network:
+        // what fails here is the `filter`-per-call version, since two filters over even an empty
+        // list produce two instances... except that Kotlin returns one shared instance for an
+        // empty result. So the assertion is made to bite by giving the index something to split.
+        RecipeIndex.loadForTest(
+            listOf(
+                Recipe("INSTANT", 1.0, mapOf("IN" to 1.0), 0),
+                Recipe("SMITHED", 1.0, mapOf("IN" to 1.0), 3600),
+            ),
+        )
+
+        try {
+            assertTrue(
+                RecipeIndex.craftingRecipes() === RecipeIndex.craftingRecipes(),
+                "crafting recipes must be the same instance between calls",
+            )
+            assertTrue(
+                RecipeIndex.forgeRecipes() === RecipeIndex.forgeRecipes(),
+                "forge recipes must be the same instance between calls",
+            )
+            assertEquals(listOf("INSTANT"), RecipeIndex.craftingRecipes().map { it.outputId })
+            assertEquals(listOf("SMITHED"), RecipeIndex.forgeRecipes().map { it.outputId })
+        } finally {
+            RecipeIndex.loadForTest(emptyList())
+        }
+    }
+
+    @Test
+    fun `neither live list carries the other page's recipes`() {
+        // Asserting the two lists are *different instances* was tried and is not a real check:
+        // outside the game the index is empty, and every empty list in Kotlin is the same
+        // singleton, so it failed on correct code. What the split actually has to guarantee is
+        // that no recipe lands on both pages - true whether or not the index has loaded.
+        assertTrue(RecipeIndex.craftingRecipes().none { it.isForge })
+        assertTrue(RecipeIndex.forgeRecipes().all { it.isForge })
     }
 }
