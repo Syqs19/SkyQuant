@@ -96,7 +96,7 @@ src/main/kotlin/dev/syqs/skyquant/
     ├── pickaxe/
     │   └── PickaxeAbilityReminder.kt  <- chat/toast/sound reminder for pickaxe ability cooldown
     └── bazaar/
-        ├── BazaarGraphCommand.kt      <- `/bloomberg` and `/skyquant bazaar`, with id completion
+        ├── BazaarGraphCommand.kt      <- `/skyquant bazaar` (and `/sq`), with id completion
         ├── BazaarGraphShortcut.kt     <- key press on the item under the cursor, in any container
         ├── BazaarGraphButton.kt       <- "Price graph" button beside Hypixel's product pages
         │                                 (title check is an EXCLUSION list, never a "must say
