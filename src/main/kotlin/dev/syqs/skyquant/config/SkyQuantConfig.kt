@@ -108,6 +108,16 @@ class SkyQuantConfig : Config() {
 
         @Expose
         @ConfigOption(
+            name = "Log Menu Contents",
+            desc = "Write every open menu's items and lore to the log, once per menu. " +
+                "For working out how to recognise a Hypixel screen.",
+        )
+        @ConfigEditorBoolean
+        @JvmField
+        var logMenuSurvey: Boolean = false
+
+        @Expose
+        @ConfigOption(
             name = "Bazaar Home",
             desc = "Key that opens the market terminal with your watchlist. Also /skyquant.",
         )

@@ -18,3 +18,18 @@ private val FORMATTING = Regex("§[0-9a-fk-orA-FK-OR]")
 
 /** This text with its formatting codes removed. */
 fun String.stripFormatting(): String = replace(FORMATTING, "")
+
+/**
+ * This text with every non-printable-ASCII character written as `\uXXXX`, for logging.
+ *
+ * Diagnostic only. A menu title read off Hypixel can carry a non-breaking space, a lookalike
+ * glyph or a stray control character, and in a log every one of those renders as the plain
+ * character it imitates - so a title that a match rejects still *reads* like it should have
+ * matched, and the next fix goes back to guessing. Printing the codepoints is what turns
+ * "the title looks right" into a fact.
+ */
+fun String.escapeNonAscii(): String = buildString {
+    for (char in this@escapeNonAscii) {
+        if (char in ' '..'~') append(char) else append("\\u%04x".format(char.code))
+    }
+}

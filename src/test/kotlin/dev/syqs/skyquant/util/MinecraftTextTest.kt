@@ -48,4 +48,30 @@ class MinecraftTextTest {
         assertEquals("50§", "50§".stripFormatting())
         assertEquals("a § b", "a § b".stripFormatting())
     }
+
+    @Test
+    fun `escaping leaves plain ascii readable`() {
+        // The common case has to stay legible, or nobody reads the diagnostic line it exists for.
+        assertEquals("The Forge", "The Forge".escapeNonAscii())
+    }
+
+    @Test
+    fun `escaping exposes a title that only looks like a match`() {
+        // The whole point of the function. A non-breaking space renders in a log exactly like an
+        // ordinary one, so a title carrying one reads as something `contains("forge")` should have
+        // caught, and the next fix goes back to guessing why it didn't. Escaped, the difference is
+        // on the page. Written as an escape rather than pasted, or the test is as unreadable as
+        // the log line it is here to justify.
+        val lookalike = "The\u00a0Forge"
+
+        assertEquals("The\\u00a0Forge", lookalike.escapeNonAscii())
+    }
+
+    @Test
+    fun `escaping shows formatting codes and control characters`() {
+        // § is itself outside ASCII, so a raw title's codes show up as codepoints rather than
+        // vanishing into the text around them.
+        assertEquals("\\u00a79Bazaar", "§9Bazaar".escapeNonAscii())
+        assertEquals("a\\u0000b", "a\u0000b".escapeNonAscii())
+    }
 }

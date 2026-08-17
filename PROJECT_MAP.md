@@ -61,6 +61,16 @@ serve, and the green suite was evidence of nothing but its own assumption. When 
 something about an external system, the value in it comes from where the example was obtained,
 not from the assertion.
 
+**Gate on what a screen offers to do, not on what it is called.** The price graph button was
+gated on the menu title three times and was wrong three times: requiring "bazaar" silenced it
+everywhere (Hypixel names a product page after the *item*), and excluding "forge" to keep it out
+of The Forge also killed "Reforge Stones", which merely contains the word. A blocklist can only
+name menus already seen, and a title carries nothing stable to match on. What settled it was
+logging the contents of 23 real menus (`BazaarGraphButton.surveyMenu`, behind
+`logMenuSurvey`): both "Buy Instantly" and "Sell Instantly" appear in exactly the 6 product pages
+and in none of the other 17. That rule needs no exceptions because it restates what the screen is
+*for* - and the survey took one session, against three spent guessing.
+
 If a class can't be tested because it reaches for a singleton or the system clock, pass
 that in as a defaulted parameter (`quotes: Collection<Quote> = BazaarLivePrices.allQuotes()`)
 rather than leaving it untested.
@@ -99,11 +109,10 @@ src/main/kotlin/dev/syqs/skyquant/
         ├── BazaarGraphCommand.kt      <- `/skyquant bazaar` (and `/sq`), with id completion
         ├── BazaarGraphShortcut.kt     <- key press on the item under the cursor, in any container
         ├── BazaarGraphButton.kt       <- "Price graph" button beside Hypixel's product pages
-        │                                 (title check is an EXCLUSION list, never a "must say
-        │                                  bazaar" one: Hypixel titles a product page after the
-        │                                  ITEM, so requiring the word killed the button for
-        │                                  three sessions. Item identity comes from
-        │                                  bazaarProductOf; the title only vetoes The Forge)
+        │                                 (gated on the menu OFFERING both "Buy Instantly" and
+        │                                  "Sell Instantly" - never on the title, which carries
+        │                                  nothing stable: a product page is named after the ITEM.
+        │                                  Item identity comes from bazaarProductOf)
         ├── BazaarHomeShortcut.kt      <- key that opens the terminal while playing
         ├── BazaarOverlayRenderer.kt   <- registers the overlay on the HUD and on container screens
         ├── BazaarTaxCalibration.kt    <- watches containers for the Community Shop and NPC shops
@@ -243,7 +252,7 @@ Small, deliberately deferred, and recorded so they are not rediscovered as new.
 
 | Issue | Where | Notes |
 |-------|-------|-------|
-| "Price graph" button appears in The Forge again | `BazaarGraphButton.EXCLUDED_TITLES` | Cosmetic - the button charts Refined Umber, a real bazaar product, so clicking it does something sensible. The title exclusion is matching on something other than what the forge menu is actually called; needs the real title read off the game, not guessed (that guess is what broke the button for three sessions - see the Tests section) |
+| *(none currently recorded)* | | |
 
 ## Most-used Gradle tasks
 

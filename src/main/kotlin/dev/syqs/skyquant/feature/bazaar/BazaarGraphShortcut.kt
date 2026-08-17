@@ -48,6 +48,10 @@ object BazaarGraphShortcut {
             BazaarGraphButton.noteScreenOpened(screen)
 
             ScreenEvents.afterExtract(screen).register { _, graphics, mouseX, mouseY, _ ->
+                // From the draw rather than from init: the container arrives empty and is filled a
+                // moment later, so a survey taken on open would report nothing. It logs once per
+                // menu and is off by default.
+                BazaarGraphButton.surveyMenu(screen)
                 drawHint(screen, graphics)
                 BazaarGraphButton.render(screen, graphics, mouseX, mouseY)
             }
