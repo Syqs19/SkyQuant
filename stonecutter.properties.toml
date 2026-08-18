@@ -2,7 +2,7 @@
 mod.id = "skyquant"
 mod.name = "SkyQuant"
 mod.group = "dev.syqs"
-mod.version = "0.1.0"
+mod.version = "0.1.1"
 
 deps.fabric_loader = "0.19.3"
 deps.fabric_language_kotlin = "1.13.13+kotlin.2.4.10"
