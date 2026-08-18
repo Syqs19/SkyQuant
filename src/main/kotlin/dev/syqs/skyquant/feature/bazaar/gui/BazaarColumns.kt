@@ -304,8 +304,63 @@ object BazaarColumns {
         }
     }
 
+    /**
+     * The Status page: one row per source of working capital, expandable into its items.
+     *
+     * Not sortable, unlike every other table here. The rows are a fixed set of sources rather
+     * than a ranking, and the player finds "Forge" by where it always is.
+     */
+    fun status(width: Int): List<DataTable.Column> {
+        val fixed = PIN + STATUS_STATE + PRICE * 2 + STATUS_PROFIT + STATUS_NEXT
+
+        return listOf(
+            DataTable.Column("", PIN, numeric = false, markerColumn = true),
+            DataTable.Column("Source", (width - fixed).coerceAtLeast(MIN_NAME), numeric = false),
+            DataTable.Column("State", STATUS_STATE, numeric = false),
+            DataTable.Column(
+                "Cost",
+                PRICE,
+                description = "What the ingredients cost when this was started, " +
+                    "at that moment's prices. Not re-priced since.",
+            ),
+            DataTable.Column(
+                "Value",
+                PRICE,
+                description = "What selling this would put in your pocket: the standing bid, " +
+                    "less the bazaar's cut.",
+            ),
+            DataTable.Column(
+                "Profit",
+                STATUS_PROFIT,
+                description = "Value minus cost. Blank when either half isn't known, " +
+                    "rather than counting the missing half as zero.",
+            ),
+            DataTable.Column(
+                "Next",
+                STATUS_NEXT,
+                numeric = false,
+                description = "How long until this is ready. Hypixel's own wording while the " +
+                    "forge widget is visible, counted down from the clock afterwards.",
+            ),
+        )
+    }
+
     // Fixed so figures stay in line across rows and between tabs.
     const val PIN = 12
+
+    /**
+     * Wide enough for "enable /widgets", which is the longest thing this column says.
+     *
+     * Worked out on paper rather than after a screenshot: at 76 it clipped by two pixels, and the
+     * clipped case is the one that only appears when the player's forge widget happens to be off.
+     */
+    private const val STATUS_STATE = 84
+
+    /** Left-aligned text, since Hypixel writes the wait as "1h 25m" rather than as a number. */
+    private const val STATUS_NEXT = 60
+
+    /** Carries a sign as well as the figure - "+10.79M" is the worst case that has to fit. */
+    private const val STATUS_PROFIT = 58
 
     private const val PRICE = 54
     private const val CHANGE = 52

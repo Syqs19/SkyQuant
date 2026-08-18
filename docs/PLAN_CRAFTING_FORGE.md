@@ -173,16 +173,21 @@ items only by NBT. Noted as a future option, not used.
 
 ## Forge state from the tab list
 
-Hypixel's `Forges:` tab widget gives every slot at once, without opening anything. Formats
-confirmed in-game:
+Hypixel's `Forges:` tab widget gives every slot at once, without opening anything.
 
 ```
-1) Refined Umber: 54m      running, minutes
-2) Umber Plate: 2h         running, hours
-3) Drill Motor: 29h        past a day, still hours - never "1d 5h"
-4) EMPTY                   free slot, note: no colon
-7) Refined Umber: Ready!   finished, waiting to be claimed
+ 1) Tungsten Plate: 1h 25m   read off a live game, 2026-08-17
+ 1) EMPTY                    read off a live game - note: no colon
+ 3) Drill Motor: 29h         past a day, still hours - never "1d 5h" (confirmed by the player)
+ 7) Refined Umber: Ready!    from Skyblocker's ForgeWidget, not observed here
+ 5) LOCKED                   from Skyblocker's ForgeWidget, not observed here
 ```
+
+**Where each line came from is recorded on purpose.** An earlier version of this section listed
+these as "confirmed in-game" when none of them had been read off a running game, which is the same
+mistake that kept the price graph button broken for three sessions. The first two were surveyed
+live; the last two come from a mod that has parsed this widget for years and are marked as
+second-hand, so if one ever misbehaves it is clear which to doubt.
 
 Four cases: `EMPTY`, `Ready!`, minutes, hours. Names carry rarity colour codes - strip
 formatting before parsing, as everywhere else.
@@ -216,10 +221,25 @@ for rule 1.
    the dearest dozen are fetched per refresh, since there are 533 priceable outputs against a
    page of a hundred. Measured on the day: the 24 dearest yielded 13 profitable rows, the best
    clearing 16.2M.
-4. Tab list reader for forge state, which switches rule 2 on. **<- next.** Note that rule 2
-   ("never refresh automatically while a forge slot is running") was written for the 57MB bulk
-   download that is no longer used, so its purpose is now to save the player's requests rather
-   than a download - worth re-deciding whether it is still wanted.
+4. ~~Tab list reader for forge state~~ **Done**, and it turned into more than a reader. The widget
+   was surveyed on a live game in three states - every slot busy, every slot empty, and the widget
+   switched off - which settled two things guessing would not have: the header is exactly
+   `Forges:` and a slot line reads ` 1) Tungsten Plate: 1h 25m`, and with the widget off the
+   section **disappears entirely** rather than emptying, so absent can never be read as idle.
+   `LOCKED` and `Ready!` came from Skyblocker's `ForgeWidget`, which has parsed this for years.
+
+   **Rule 2 was dropped rather than switched on.** It existed to protect a 57MB download that no
+   longer happens; today a refresh is a handful of already-rationed Coflnet calls, and suspending
+   them while a forge runs would be actively unhelpful - that is precisely when the player wants
+   to know whether the next batch is still worth making.
+
+   What the reader feeds is the **Status tab**: one expandable row per source of working capital,
+   with the forge's cost captured when a job starts and never re-priced. `ForgeLedger` stores the
+   finish *time* rather than the remaining text, so the page still answers from another island,
+   marked `estimated` rather than `tracked` because the countdown is then derived rather than read.
+
+5. Minions, auctions, Kat and Fann are listed on that page as `not yet read`. Listing them is
+   deliberate: omitting a source would let the total read as complete when it isn't.
 
 ---
 

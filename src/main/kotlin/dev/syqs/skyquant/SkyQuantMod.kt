@@ -7,6 +7,7 @@ import dev.syqs.skyquant.feature.bazaar.BazaarHomeShortcut
 import dev.syqs.skyquant.feature.bazaar.BazaarOverlayRenderer
 import dev.syqs.skyquant.feature.bazaar.BazaarTaxCalibration
 import dev.syqs.skyquant.feature.bazaar.MarketDataPreload
+import dev.syqs.skyquant.feature.bazaar.TabListSurvey
 import dev.syqs.skyquant.feature.pickaxe.PickaxeAbilityReminder
 import dev.syqs.skyquant.feature.rift.UbikCubeReminder
 import dev.syqs.skyquant.hud.HudRegistry
@@ -37,6 +38,7 @@ object SkyQuantMod : ModInitializer {
         BazaarHomeShortcut.register()
         BazaarOverlayRenderer.register()
         BazaarTaxCalibration.register()
+        TabListSurvey.register()
         // Last of the bazaar registrations: it only warms data the others read, so nothing here
         // depends on it having run.
         MarketDataPreload.register()

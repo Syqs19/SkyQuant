@@ -233,6 +233,15 @@ class DataTable(
 
     private fun columnLeft(index: Int): Int = columnLefts[index]
 
+    /**
+     * Right edge of a column, in screen coordinates.
+     *
+     * Public so a caller can put its own mark inside a column the table drew - the Status page's
+     * progress bar sits at the right of the name column. Asking the table where that is keeps the
+     * bar aligned when a column width changes, where a hand-computed offset would silently drift.
+     */
+    fun columnRight(index: Int): Int = columnLefts[index] + columns[index].width
+
     /** Left edge for the text itself: flush left for names, flush right for figures. */
     private fun textX(font: Font, index: Int, text: String, numeric: Boolean): Int {
         val left = columnLeft(index)

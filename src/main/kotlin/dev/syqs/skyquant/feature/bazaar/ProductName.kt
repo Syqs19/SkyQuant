@@ -26,6 +26,24 @@ object ProductName {
         }
     }
 
+    /**
+     * The other direction: "Tungsten Plate" -> TUNGSTEN_PLATE.
+     *
+     * Needed because Hypixel's tab list names what is being forged the way a player reads it,
+     * while every price here is keyed by id. Deriving the id is enough for forge outputs, whose
+     * names are plain words, and it avoids carrying a second name table that would drift from the
+     * first.
+     *
+     * It cannot be right for every item in the game - anything whose display name differs from
+     * its id by more than case and spaces will not round-trip - so callers must treat a miss as
+     * "not priced" rather than assuming the lookup always works. That is why this returns the id
+     * rather than a price: the caller looks it up and gets null when it isn't a real product.
+     */
+    fun idOf(displayName: String): String = displayName
+        .trim()
+        .uppercase()
+        .replace(' ', '_')
+
     private val ABBREVIATIONS = mapOf(
         "Enchanted" to "Ench",
         "Ultimate" to "Ult",

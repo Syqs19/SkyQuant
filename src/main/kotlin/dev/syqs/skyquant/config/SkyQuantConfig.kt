@@ -118,6 +118,16 @@ class SkyQuantConfig : Config() {
 
         @Expose
         @ConfigOption(
+            name = "Log Tab List On F9",
+            desc = "Write the whole tab list to the log when F9 is pressed. " +
+                "For working out how to read a Hypixel widget.",
+        )
+        @ConfigEditorBoolean
+        @JvmField
+        var logTabListSurvey: Boolean = false
+
+        @Expose
+        @ConfigOption(
             name = "Bazaar Home",
             desc = "Key that opens the market terminal with your watchlist. Also /skyquant.",
         )

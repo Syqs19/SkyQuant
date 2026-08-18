@@ -155,12 +155,25 @@ src/main/kotlin/dev/syqs/skyquant/
         │   │                             cheapest listings (never the cheapest), with the
         │   │                             auction's own TIERED tax - not BazaarTax
         │   ├── CraftProfit.kt         <- prices one recipe: ingredients at topAsk, output net of tax
-        │   └── CraftSummary.kt        <- the ranked rows behind both pages (per hour for forge)
+        │   ├── CraftSummary.kt        <- the ranked rows behind both pages (per hour for forge)
+        │   ├── Liquidity.kt           <- whether a price describes a market at all. Judged on the
+        │   │                             OUTPUT's weekly volume, which the ingredient figure in
+        │   │                             CraftProfit.weeklyVolume says nothing about
+        │   ├── ForgeState.kt          <- parses Hypixel's `Forges:` tab widget; null = UNKNOWN,
+        │   │                             never "idle" (the widget vanishes when switched off)
+        │   ├── ForgeLedger.kt         <- remembers each slot's job, its cost and its FINISH TIME
+        │   │                             (not the remaining text), so it survives leaving the isle
+        │   ├── ForgeJobPricing.kt     <- a forge job's ingredient cost and duration, from NEU
+        │   ├── WorkingCapital.kt      <- the Status page's model: value, cost, profit per source
+        │   └── WorkingCapitalSummary.kt <- builds those rows from the widget or from the ledger
         └── gui/
-            ├── BazaarHomeScreen.kt    <- the terminal: six tabs - Watchlist, Flip, the two NPC
-            │                             directions, Craft and Forge. Craft/Forge figures are
-            │                             PAIRS ("fast/patient"), each half priced with the cost
-            │                             its own trade pays; see docs/PRICE_SCREENS.md
+            ├── BazaarHomeScreen.kt    <- the terminal: seven tabs - Status, Watchlist, Flip, the
+            │                             two NPC directions, Craft and Forge. Craft/Forge figures
+            │                             are PAIRS ("fast/patient"), each half priced with the
+            │                             cost its own trade pays; see docs/PRICE_SCREENS.md.
+            │                             Status is the odd one out: it reports the PLAYER's own
+            │                             position rather than a market ranking, one expandable
+            │                             row per source of working capital
             ├── BazaarGraphScreen.kt   <- the chart screen: loading, layout, buttons, side panel
             ├── PriceChart.kt          <- draws curves, axes, volume and hover inside a rectangle
             │                             (an hour whose price sits above the scale is left OUT
@@ -344,8 +357,27 @@ Small, deliberately deferred, and recorded so they are not rediscovered as new.
   false reading is worse than a visibly broken one**, because nothing tells the reader to doubt
   it. Guard the skip so it can't empty the chart: below two remaining points, skip nothing.
 
+- **Anything ranking by a price** -> ask `Liquidity` whether that price is a market first. The
+  Forge page led with AMBER_MATERIAL on a 10.0M ask against a 1.1M best bid, on something that
+  sold **15 units in a week**: every figure was read correctly, the row was worthless, and because
+  the page ranks on profit the most meaningless price is exactly the one that reaches the top.
+  Note the filter that already existed did not catch it - `CraftProfit.weeklyVolume` measures the
+  scarcest **ingredient**, and this recipe has liquid ingredients and an illiquid output, so
+  `outputWeeklyVolume` is a separate figure. Thin rows are **marked and sorted last, never
+  dropped**: a real demand spike looks identical from here, which is also how Coflnet handles it
+  (they flag, and hiding is opt-in).
+
 - **Anything computing a profit** -> a bazaar *sale* is taxed (`BazaarTax`), a sale to an NPC
-  is not. And `sellPrice` is the **lower** of the two bazaar prices - it is what buyers bid, so
+  is not. **A new screen must reuse this, not re-derive it**: the Status page priced its output
+  gross and with `sellPrice` instead of `topBid`, overstating the profit on screen by 12% in the
+  flattering direction - a whole page written without looking at how the Forge page next to it
+  already did the same sum.
+
+- **Anything called from a `draw`** runs ~60 times a second, so it must not save, allocate or
+  parse unconditionally. `ForgeLedger.record` wrote the file on every frame the Status tab was
+  open (serialise + temp file + atomic move, sixty times a second) until it was made to compare
+  first, and `ForgeTracker.state` re-sorted a hundred tab list entries twice per frame until it
+  was given a half-second cache. And `sellPrice` is the **lower** of the two bazaar prices - it is what buyers bid, so
   it is both what you receive selling instantly and what a *buy order* fills at. Getting that
   backwards silently inverts every figure on the screen.
   For an **order-to-order flip** price from the order book (`topAsk`/`topBid`), not from

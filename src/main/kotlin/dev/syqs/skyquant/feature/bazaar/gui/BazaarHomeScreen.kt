@@ -1,6 +1,7 @@
 package dev.syqs.skyquant.feature.bazaar.gui
 
 import dev.syqs.skyquant.DataCredits
+import dev.syqs.skyquant.feature.bazaar.ForgeTracker
 import dev.syqs.skyquant.feature.bazaar.ProductName
 import dev.syqs.skyquant.feature.bazaar.data.BazaarLivePrices
 import dev.syqs.skyquant.feature.bazaar.data.BazaarMarketSummary
@@ -14,7 +15,13 @@ import dev.syqs.skyquant.feature.bazaar.data.RecipeIndex
 import dev.syqs.skyquant.feature.bazaar.data.NpcFlipSummary
 import dev.syqs.skyquant.feature.bazaar.data.NpcDailyLimit
 import dev.syqs.skyquant.feature.bazaar.data.NpcSellPrices
+import dev.syqs.skyquant.feature.bazaar.data.ForgeLedger
+import dev.syqs.skyquant.feature.bazaar.data.Liquidity
 import dev.syqs.skyquant.feature.bazaar.data.NpcShopPrices
+import dev.syqs.skyquant.feature.bazaar.data.WorkingCapital
+import dev.syqs.skyquant.feature.bazaar.data.WorkingCapitalSummary
+import dev.syqs.skyquant.feature.bazaar.data.WorkingGroup
+import dev.syqs.skyquant.feature.bazaar.data.WorkingItem
 import dev.syqs.skyquant.gui.Palette
 import net.minecraft.client.Minecraft
 import net.minecraft.client.gui.GuiGraphicsExtractor
@@ -43,6 +50,20 @@ class BazaarHomeScreen(
      * bazaar-to-bazaar flip lives on, and that only became ambiguous once NPC flips arrived.
      */
     private enum class Tab(val label: String, val defaultSort: DataTable.Sort?) {
+        /**
+         * What the player has working right now, rather than where the market's profit is.
+         *
+         * First, and the one the terminal opens on: it is the only view about the player's own
+         * position rather than about prices, so it is what "how am I doing" opens to. Every other
+         * tab ranks a market; this one adds up coins already committed.
+         *
+         * Its rule for what belongs is narrow on purpose - capital that is currently maturing.
+         * Daily quests, commissions and powders were considered and rejected: they are things to
+         * do rather than money in motion, and the tab list already shows them without opening
+         * anything.
+         */
+        STATUS("Status", null),
+
         WATCH("Watchlist", null),
         FLIP("Flip", DataTable.Sort(BazaarSort.MARGIN)),
 
@@ -63,7 +84,9 @@ class BazaarHomeScreen(
         FORGE("Forge", DataTable.Sort(BazaarSort.PER_HOUR)),
     }
 
-    private var tab = Tab.WATCH
+    // Status: opening on "what have I got working" rather than on a market ranking, since that is
+    // the question the terminal is opened with most often.
+    private var tab = Tab.STATUS
 
     private var panel: ScreenRectangle = ScreenRectangle.empty()
 
@@ -79,6 +102,25 @@ class BazaarHomeScreen(
     private val rows = mutableListOf<Row>()
 
     private class Row(val bounds: ScreenRectangle, val productId: String, val pinToggle: ScreenRectangle?)
+
+    /** Status rows drawn this frame, keyed by which group they expand. */
+    private val statusRows = mutableListOf<StatusRow>()
+
+    private class StatusRow(val bounds: ScreenRectangle, val groupId: String)
+
+    /** Item rows inside expanded groups, each opening that product's graph. */
+    private val statusItemRows = mutableListOf<StatusItemRow>()
+
+    private class StatusItemRow(val bounds: ScreenRectangle, val productId: String)
+
+    /**
+     * Which Status groups are open. Kept for the life of the screen, so opening the forge and
+     * switching tabs to check a price doesn't collapse it on the way back.
+     */
+    private val expandedGroups = mutableSetOf<String>()
+
+    /** Whether the opening row has been chosen yet - see the note in [drawStatus]. */
+    private var statusExpansionInitialised = false
 
     /** Header explanation to draw last, so it sits above the rows instead of behind them. */
     private var pendingTooltip: Pair<String, String>? = null
@@ -132,6 +174,8 @@ class BazaarHomeScreen(
         super.extractRenderState(graphics, mouseX, mouseY, partialTick)
 
         rows.clear()
+        statusRows.clear()
+        statusItemRows.clear()
         pendingTooltip = null
 
         val pose = Matrix3x2f(graphics.pose())
@@ -183,6 +227,7 @@ class BazaarHomeScreen(
         headerY = contentTop
 
         when (tab) {
+            Tab.STATUS -> drawStatus(graphics, contentLeft, contentTop, contentWidth, contentBottom, mouseX, mouseY)
             Tab.WATCH -> drawWatchlist(graphics, pose, contentLeft, contentTop, contentWidth, contentBottom, mouseX, mouseY)
             Tab.FLIP -> drawFlips(graphics, pose, contentLeft, contentTop, contentWidth, contentBottom, mouseX, mouseY)
             Tab.NPC_BUY -> drawNpcToBazaar(graphics, contentLeft, contentTop, contentWidth, contentBottom, mouseX, mouseY)
@@ -308,6 +353,275 @@ class BazaarHomeScreen(
                 )
             }
         }
+    }
+
+    /**
+     * What the player has working right now, one line per source, expandable for the detail.
+     *
+     * A list rather than the quadrants first sketched, and the arithmetic is why: the five
+     * sources fully expanded want 698px against the 250 this page has - 2.8 times over, with
+     * minions alone larger than the whole page. Quadrants would have hit the same wall inside a
+     * narrower box. Summarising by default costs 88px and leaves 162 to spend on whichever row
+     * the player opens, which is enough for all seven forge slots at once.
+     *
+     * The total is the figure no other screen gives, and it is deliberately hard to trust
+     * wrongly: it counts only what could actually be priced, and says so when a source could not
+     * be read at all.
+     */
+    private fun drawStatus(
+        graphics: GuiGraphicsExtractor,
+        x: Int,
+        top: Int,
+        width: Int,
+        bottom: Int,
+        mouseX: Int,
+        mouseY: Int,
+    ) {
+        // Records before reading, so a job seen for the first time has its cost captured at the
+        // prices of the moment it started rather than at whatever they are when it finishes.
+        ForgeTracker.recordIfReadable()
+
+        val capital = WorkingCapitalSummary.build(
+            forge = ForgeTracker.state,
+            priceOf = { name ->
+                // A forge output whose name doesn't map to a bazaar id comes back null and shows
+                // as "–", which is the honest answer for an item nothing here can price.
+                BazaarLivePrices.quoteFor(ProductName.idOf(name))?.let { quote ->
+                    // topBid, not sellPrice: this is what the player will collect and then sell,
+                    // and a sell offer fills at the standing bid. And net of the bazaar's cut,
+                    // which the Craft and Forge pages already subtract - showing the gross here
+                    // overstated the profit on screen by 12%, in the flattering direction.
+                    val unit = quote.topBid.takeIf { it > 0 } ?: quote.sellPrice
+                    val net = unit * (1 - BazaarTax.rate)
+
+                    WorkingCapitalSummary.Priced(
+                        value = net.toLong(),
+                        thin = Liquidity.of(quote).isThin,
+                    )
+                }
+            },
+            remembered = ForgeLedger.jobs,
+        )
+
+        // Opens the actionable row the first time the page is drawn, not on every frame: after
+        // that the player's own expanding and collapsing is what decides.
+        if (!statusExpansionInitialised) {
+            statusExpansionInitialised = true
+            WorkingCapitalSummary.rowToExpand(capital)?.let { expandedGroups.add(it) }
+        }
+
+        val table = DataTable(BazaarColumns.status(width), x, width)
+        var y = table.drawHeader(graphics, font, top)
+
+        table.headerTooltipAt(font, top, mouseX, mouseY)?.let { pendingTooltip = it }
+
+        for (group in capital.groups) {
+            if (y + DataTable.ROW_HEIGHT > bottom) break
+
+            val expanded = group.id in expandedGroups
+            val hasDetail = group.count > 0
+
+            val bounds = table.drawRow(
+                graphics, font, y,
+                listOf(
+                    DataTable.Cell(
+                        if (!hasDetail) " " else if (expanded) "▾" else "▸",
+                        Palette.FAINT,
+                    ),
+                    DataTable.Cell(group.label, Palette.NAME),
+                    statusStateCell(group),
+                    moneyCell(group.cost, Palette.MUTED),
+                    moneyCell(group.value, Palette.TEXT),
+                    profitCell(group.profit, group.anyThin),
+                    DataTable.Cell(nextEventOf(group) ?: "–", Palette.MUTED),
+                ),
+                mouseX, mouseY,
+            )
+
+            if (hasDetail) statusRows.add(StatusRow(bounds, group.id))
+            y += DataTable.ROW_HEIGHT
+
+            if (!expanded) continue
+
+            for (item in group.items) {
+                if (y + DataTable.ROW_HEIGHT > bottom) break
+                y = drawStatusDetail(graphics, table, item, x, y, mouseX, mouseY)
+            }
+            // A blank line after an open group, so the next source doesn't read as another of its
+            // items. Only when something followed, or the total gains a stray gap above it.
+            if (group.items.isNotEmpty() && y + DataTable.ROW_HEIGHT <= bottom) y += DETAIL_GAP
+        }
+
+        drawWorkingTotal(graphics, capital, x, y, width, bottom)
+    }
+
+    /** One item inside an expanded group - indented, and quieter than the summary above it. */
+    private fun drawStatusDetail(
+        graphics: GuiGraphicsExtractor,
+        table: DataTable,
+        item: WorkingItem,
+        x: Int,
+        y: Int,
+        mouseX: Int,
+        mouseY: Int,
+    ): Int {
+        val ready = item.remaining == WorkingCapitalSummary.READY
+
+        val bounds = table.drawRow(
+            graphics, font, y,
+            listOf(
+                DataTable.Cell(" ", Palette.FAINT),
+                DataTable.Cell("  ${item.name}", if (item.idle) Palette.FAINT else Palette.MUTED),
+                // The liquidity warning sits in the state column, which is empty on detail rows.
+                // Amber rather than red: it is a reason to check, not a verdict - a real demand
+                // spike looks identical from here.
+                if (item.thin) DataTable.Cell("THIN", Palette.STALE)
+                else DataTable.Cell("", Palette.MUTED),
+                moneyCell(item.cost, Palette.FAINT),
+                moneyCell(item.value, Palette.MUTED),
+                profitCell(item.profit, item.thin),
+                // Something finished is the one thing on this page worth acting on now, so it is
+                // the only detail cell that gets the positive colour.
+                DataTable.Cell(
+                    item.remaining ?: "–",
+                    when {
+                        ready -> Palette.POSITIVE
+                        item.idle -> Palette.FAINT
+                        else -> Palette.MUTED
+                    },
+                ),
+            ),
+            mouseX, mouseY,
+        )
+
+        // columnRight is already absolute, so the row's own x isn't added again.
+        item.progress?.let {
+            drawProgressBar(graphics, it, table.columnRight(NAME_COLUMN) - PROGRESS_GAP, y)
+        }
+
+        // Only rows that name a real item open anything: an empty slot has no graph to show.
+        if (!item.idle) statusItemRows.add(StatusItemRow(bounds, ProductName.idOf(item.name)))
+
+        return y + DataTable.ROW_HEIGHT
+    }
+
+    /**
+     * A thin bar to the right of the item's name, showing how far through the job it is.
+     *
+     * Beside the name rather than under it. Underlining every row made the names read as links
+     * and the bars as one continuous rule down the page - the progress was there but nobody would
+     * see it as progress. Set to the right of the text it belongs to, vertically centred on the
+     * row, it reads as a gauge.
+     *
+     * Still inside the name column rather than given a column of its own: it restates the "Next"
+     * figure visually, so a fixed column would spend width on a duplicate.
+     */
+    private fun drawProgressBar(
+        graphics: GuiGraphicsExtractor,
+        progress: Double,
+        nameRight: Int,
+        y: Int,
+    ) {
+        val left = nameRight - PROGRESS_WIDTH
+        val top = y + (DataTable.ROW_HEIGHT - PROGRESS_HEIGHT) / 2
+
+        graphics.fill(left, top, left + PROGRESS_WIDTH, top + PROGRESS_HEIGHT, Palette.RULE)
+        val filled = (PROGRESS_WIDTH * progress).toInt().coerceIn(0, PROGRESS_WIDTH)
+        if (filled > 0) {
+            graphics.fill(left, top, left + filled, top + PROGRESS_HEIGHT, Palette.ACCENT)
+        }
+    }
+
+    /** A money figure, or a dash when it isn't known - never a zero standing in for unknown. */
+    private fun moneyCell(amount: Long?, colour: Int): DataTable.Cell = DataTable.Cell(
+        amount?.let { NumberFormats.price(it.toDouble()) } ?: "–",
+        if (amount != null) colour else Palette.FAINT,
+    )
+
+    /**
+     * Profit, signed and coloured by direction. Blank when either half of the sum is missing.
+     *
+     * A profit computed from a thin market is bracketed and drawn muted rather than green. The
+     * figure is arithmetically correct and practically meaningless - it was a green "+8.5M" on an
+     * item nobody was buying that made the forge look like a bargain - so it is shown without the
+     * colour that invites acting on it.
+     */
+    private fun profitCell(profit: Long?, thin: Boolean = false): DataTable.Cell {
+        if (profit == null) return DataTable.Cell("–", Palette.FAINT)
+
+        val sign = if (profit >= 0) "+" else "-"
+        val figure = sign + NumberFormats.price(kotlin.math.abs(profit).toDouble())
+
+        if (thin) return DataTable.Cell("[$figure]", Palette.MUTED)
+
+        return DataTable.Cell(
+            figure,
+            if (profit >= 0) Palette.POSITIVE else Palette.NEGATIVE,
+        )
+    }
+
+    /** The state column: what this source is currently able to tell us. */
+    private fun statusStateCell(group: WorkingGroup): DataTable.Cell = when (group.state) {
+        // "tracked" against "estimated": the pair says where the figures come from rather than
+        // how many there are. Reading the widget is first-hand; replaying the ledger from another
+        // island is a calculation from a reading taken earlier, and the words separate the two
+        // without needing a legend.
+        WorkingGroup.State.READ ->
+            if (group.count > 0) DataTable.Cell("${group.count} tracked", Palette.TEXT)
+            else DataTable.Cell("idle", Palette.FAINT)
+
+        WorkingGroup.State.REMEMBERED ->
+            DataTable.Cell("${group.count} estimated", Palette.STALE)
+
+        // Named for the fix rather than the fault: the widget being off is the usual cause, and
+        // "unknown" alone leaves the player with nothing to do about it.
+        WorkingGroup.State.UNKNOWN -> DataTable.Cell("enable /widgets", Palette.STALE)
+
+        WorkingGroup.State.PLANNED -> DataTable.Cell("not yet read", Palette.FAINT)
+    }
+
+    /** The soonest thing to happen in a group, or null when nothing is pending. */
+    private fun nextEventOf(group: WorkingGroup): String? {
+        if (group.items.any { it.remaining == WorkingCapitalSummary.READY }) {
+            return WorkingCapitalSummary.READY
+        }
+        // First rather than shortest: Hypixel writes the wait as text ("1h 25m", "29h"), and
+        // ordering those properly means parsing a duration the widget never promised. The forge
+        // lists its slots in order, so the first pending one is the honest answer.
+        return group.items.firstOrNull { it.remaining != null }?.remaining
+    }
+
+    /**
+     * The summed line under the list.
+     *
+     * Says "at least" whenever a source could not be read, because the figure is then a floor and
+     * not a total - and a floor presented as a total is the kind of plausible wrong number this
+     * project has decided is worse than a visibly missing one.
+     */
+    private fun drawWorkingTotal(
+        graphics: GuiGraphicsExtractor,
+        capital: WorkingCapital,
+        x: Int,
+        y: Int,
+        width: Int,
+        bottom: Int,
+    ) {
+        if (y + DataTable.ROW_HEIGHT * 2 > bottom) return
+
+        val ruleY = y + 3
+        graphics.fill(x, ruleY, x + width, ruleY + 1, Palette.RULE)
+
+        val label = if (capital.partial) "TOTAL WORKING (at least)" else "TOTAL WORKING"
+        graphics.text(font, Component.literal(label), x, ruleY + 6, Palette.HEADING)
+
+        val total = capital.total?.let { NumberFormats.price(it.toDouble()) } ?: "–"
+        graphics.text(
+            font,
+            Component.literal(total),
+            x + width - font.width(total),
+            ruleY + 6,
+            if (capital.total != null) Palette.TEXT else Palette.FAINT,
+        )
     }
 
     private fun drawWatchlist(
@@ -773,6 +1087,16 @@ class BazaarHomeScreen(
      * a colour, per the house rule that colour never carries meaning alone.
      */
     private fun craftNameCell(craft: CraftProfit.Craft): DataTable.Cell {
+        // The bazaar equivalent of the auction warning above: what this makes barely trades, so
+        // the profit beside it is arithmetic rather than money. A word rather than a colour, and
+        // the same reason - colour never carries meaning alone here.
+        if (craft.outputIsThin) {
+            return DataTable.Cell.of(
+                DataTable.Cell.Part(craftName(craft), Palette.MUTED),
+                DataTable.Cell.Part(" THIN", Palette.STALE),
+            )
+        }
+
         if (!craft.fromAuction) return DataTable.Cell(craftName(craft), Palette.NAME)
 
         return DataTable.Cell.of(
@@ -985,6 +1309,22 @@ class BazaarHomeScreen(
                 }
         }
 
+        // Item rows first: they sit inside an expanded group, so testing the group's own row first
+        // would swallow every click on the items it just revealed.
+        for (row in statusItemRows) {
+            if (!row.bounds.containsPoint(x, y)) continue
+
+            minecraft.setScreen(BazaarGraphScreen(row.productId, this))
+            return true
+        }
+
+        for (row in statusRows) {
+            if (!row.bounds.containsPoint(x, y)) continue
+
+            if (!expandedGroups.remove(row.groupId)) expandedGroups.add(row.groupId)
+            return true
+        }
+
         for (row in rows) {
             if (!row.bounds.containsPoint(x, y)) continue
 
@@ -1005,6 +1345,10 @@ class BazaarHomeScreen(
     private fun columnsFor(tab: Tab): List<DataTable.Column>? {
         val width = panel.width() - PADDING * 2
         return when (tab) {
+            // Neither sorts: the watchlist keeps the player's own order, and Status lists fixed
+            // sources rather than a ranking - re-ordering "Forge, Minions, Auctions" by value
+            // would move a row the player navigates to by position.
+            Tab.STATUS -> null
             Tab.WATCH -> null
             Tab.FLIP -> BazaarColumns.flips(width)
             Tab.NPC_BUY -> BazaarColumns.npcToBazaar(width)
@@ -1078,6 +1422,19 @@ class BazaarHomeScreen(
          * than repeated, so the two cannot drift apart.
          */
         private const val PIN_COLUMN_WIDTH = BazaarColumns.PIN
+
+        /** Blank line closing an expanded Status group, so its items don't run into the next one. */
+        private const val DETAIL_GAP = 4
+
+        /** Progress bar at the right of the name column - a gauge beside the name, not under it. */
+        private const val PROGRESS_WIDTH = 40
+        private const val PROGRESS_HEIGHT = 3
+
+        /** Breathing room between the bar and the next column's figures. */
+        private const val PROGRESS_GAP = 6
+
+        /** Index of the name column in the Status table, which the progress bar sits inside. */
+        private const val NAME_COLUMN = 1
 
         private const val TOOLTIP_MAX_WIDTH = 160
 
