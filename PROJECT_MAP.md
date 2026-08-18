@@ -245,10 +245,78 @@ the mod to actually run lives in `docs/`.
 |---|---|
 | `README.md` (root) | Quick setup, how to build, pre-release checklist. Entry point for anyone opening the project. |
 | `PROJECT_MAP.md` (root) | This file. |
+| `CHANGELOG.md` (root) | What changed in each release, one line per change, written for players rather than for developers. Kept up to date as work finishes, so it can be pasted straight into a Modrinth release. |
 | `docs/RESEARCH.md` | Why the technical choices were made (Fabric, Stonecutter, Kotlin, etc.), reference mods, Hypixel rules, sources. Check this before proposing stack changes. |
 | `docs/API_RESOURCES.md` | What every data source actually returns, which fields are used and which are not, rate limits, and how data is kept fresh without a mod update. Read before assuming a figure is available. |
 | `docs/PRICE_SCREENS.md` | What each figure on the price graph and the NPC tabs means, and why. Every threshold in it was measured against live data, and several replaced a rule that looked sound and was wrong in game. Read before changing what a screen shows. |
+| `docs/PRIOR_ART.md` | How the established mods solved a problem before we solved it ourselves: question asked, where we looked, what survived checking, what we decided. Read before designing a feature, and append to it after. |
 | `LICENSE` (root) | Full text of GPL-3.0-or-later, the license chosen for the project. |
+
+## Working rule: check prior art first
+
+Before writing anything non-trivial - a new screen, a new source of game data, an
+unfamiliar Minecraft API, or a bug that has already survived two fixes - check how
+SkyHanni, Skyblocker or Firmament solved it. They have shipped against this game
+for years, and the answer is usually in public source.
+
+It runs in three phases, and all three matter:
+
+1. **Search.** The reference mods first (SkyHanni is closest to us - Kotlin and
+   Stonecutter), then the NEU data repository for item and recipe questions, then
+   the Fabric docs and wiki when the question is about Minecraft itself rather
+   than Skyblock. Record *where* you looked, not only what you found: a search
+   that came back empty means the ground is genuinely unexplored, and that is
+   worth knowing.
+2. **Verify.** A finding is not an answer yet. Does it target 26.1.2, or has
+   version drift broken it - GUI and rendering code especially. Does their case
+   actually match ours, or does it only look similar? Does it fit the decisions
+   this project has already made? Say which findings survived and which did not.
+3. **Read our own code, then propose.** What does the finding change about the
+   plan? Does the pattern already exist somewhere else in this repo - the Status
+   tab shipped with the bazaar tax missing next to a screen that had the
+   arithmetic right. What runs inside `draw`? What is now dead or duplicated?
+
+A phase 1 that ends in "nobody solved this, and here is why" is a success, not a
+failure: it closes the question cheaply. What is not acceptable is leaving it
+unasked. Skip the check only for copy edits, mechanical renames and arithmetic
+fixes inside code we already own - and say you are skipping it.
+
+Write the outcome to [docs/PRIOR_ART.md](docs/PRIOR_ART.md). When a run
+contradicts something in `RESEARCH.md`, `API_RESOURCES.md` or this file, fix that
+document in the same pass.
+
+Their approaches are there to be studied, **not their code**: the reference mods
+are LGPL-2.1, LGPL-3.0 and GPL-3.0 respectively, and this project is
+GPL-3.0-or-later.
+
+## Working rule: write the changelog as you go
+
+When a piece of work is finished, add a line to [CHANGELOG.md](CHANGELOG.md)
+under the current `## Version` heading - the **last** one in the file, since it
+reads oldest version first - in the right group (New Features / Improvements /
+Fixes / Technical Details). Not at release time: by then the entries turn into a
+list of commit subjects.
+
+The file is written to be **pasted straight into a Modrinth release**, so it
+follows the shape the SkyBlock community already reads, SkyHanni's: `## Version
+X`, grouped headings, and lines starting with `+`. Their entries carry an author
+credit and a pull request link; ours do not, since that is one contributor and
+noise on a small mod.
+
+**One line per change, and write it for the player.** The commit message explains
+the change to whoever reads the code; the changelog line tells someone who plays
+SkyBlock what is different now. Open with a past-tense verb (Added, Improved,
+Fixed), say what is different, and stop - no class names, no reasoning, no
+measurements. "The Forge tab now marks items that barely trade and sorts them
+last" is the same change as "added an output-volume filter to `forges()`", and
+only one of them means anything to the person installing the mod.
+
+Anything with no visible effect goes in *Technical Details* in one line, or
+nowhere at all.
+
+At release time the heading is already there: bump `mod.version` in
+`stonecutter.properties.toml`, then start a new `## Version` block at the bottom
+of the file for the next round of work.
 
 ## Auto-generated folders (not version-controlled, see `.gitignore`)
 
