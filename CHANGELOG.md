@@ -50,7 +50,9 @@ Oldest version first, newest at the bottom.
 + Fixed the Forge tab ranking on the asking price of items nobody was buying.
 + Fixed the in-game help still naming a command that no longer exists.
 + Fixed ten bazaar items reading as "Ink Sack:3" or "Sand:1" instead of Cocoa Beans and Red Sand.
++ Fixed the mod page listing five of the seven tabs, leaving out Status and Bazaar to NPC.
 
 ### Technical Details
 
 + The terminal no longer re-sorts every recipe sixty times a second, freeing about a third of each frame.
++ The project's own documents no longer describe finished features as still to be built.

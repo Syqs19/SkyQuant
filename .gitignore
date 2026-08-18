@@ -34,6 +34,10 @@ CLAUDE.md
 .impeccable/
 .mcp.json
 
+# The open-work list. Deliberately not versioned: it is a working note about what is unfinished,
+# and a published mod page should not double as a list of what it cannot do yet.
+THINGS TO DO.md
+
 # Local files with API keys/tokens (Hypixel API key, etc.)
 local.properties
 .env

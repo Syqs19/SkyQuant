@@ -3,10 +3,13 @@
 Agreed plan and every measurement behind it. Written down so none of the research has to be
 repeated.
 
-> **Status, 15 August 2026: steps 1 and 2 are built and in the game.** The recipe parser, the
+> **Status, 18 August 2026: all four steps are built and in the game.** The recipe parser, the
 > profit maths, the cached index and both pages exist; see `docs/PRICE_SCREENS.md` for what the
-> screens show and why. **Steps 3 and 4 - auction pricing for recipe outputs, and the forge-slot
-> reader - are still to do**, and everything below about them stands.
+> screens show and why. Step 3 (auction pricing for recipe outputs) lives in `CraftProfit`, which
+> falls back to `AuctionSellPrice` when a recipe output is not on the bazaar; step 4 (the
+> forge-slot reader) is `ForgeTracker` and became the **Status tab**. This document is now a
+> record of the reasoning, not a plan - the measurements below are still the ones the code is
+> built on.
 >
 > Three corrections the build made to this document, all found by walking the whole repo rather
 > than sampling it:
@@ -251,4 +254,8 @@ for rule 1.
 ## Open questions
 
 - Exact wording of a running forge slot when the item name itself contains a colon - not yet seen.
-- Whether any shop or recipe uses a fractional `count` in a way the parser should round.
+  Live surveys have never produced one; the parser splits on the **last** colon so a name carrying
+  one still reads correctly.
+- ~~Whether any shop or recipe uses a fractional `count`~~ - **answered while building: none do**,
+  zero of 4487. The field is parsed as `Double` anyway, since quantities like
+  `"ENCHANTED_SUGAR:2500.0"` are written that way.

@@ -45,8 +45,9 @@ you'll actually be charged.
 <tr>
 <td width="50%" valign="top">
 
-### 📊 Six views, one screen
+### 📊 Seven views, one screen
 
+**Status** — what you have working right now
 **Watchlist** — your items, live
 **Flip** — the bazaar by margin
 **NPC → Bazaar** — buy cheap, sell dear

@@ -2,6 +2,11 @@
 
 Map of where everything lives, meant for quickly getting oriented (human or AI).
 
+**Looking for what is left to do?** It is all in `THINGS TO DO.md` in this directory, and only
+there. A finished task is deleted from that file rather than ticked, so anything still written in
+it is genuinely open. It is gitignored, so a fresh clone will not have it — that is deliberate:
+it is a working note, not part of the published project.
+
 ## Build configuration (project root)
 
 | File | What it contains |

@@ -20,9 +20,11 @@ The game shows you one item at a time, in its own menu. This shows fifty at once
 
 | Tab | What it answers |
 |---|---|
+| **Status** | What have I got working right now, and how much is tied up in it? |
 | **Watchlist** | What are my items doing right now? |
 | **Flip** | Where's the widest margin on the bazaar? |
 | **NPC → Bazaar** | What can I buy from a shop and sell for more? |
+| **Bazaar → NPC** | And what's worth buying on the bazaar to sell to a shop? |
 | **Craft** | Is this worth more made than bought? |
 | **Forge** | What's the best use of a forge slot for the next 6 hours? |
 

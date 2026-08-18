@@ -158,9 +158,13 @@ items sold by several NPCs (Wheat and Coal each appear twice - the lowest price 
 the Forge page would be meaningless, since 10M profit over six hours and 10M over five minutes
 are not the same opportunity. The figure to rank on is **profit per hour**.
 
-**In use**: nothing yet.
+**In use**: `crafting`, `forge` and `npc_shop` recipes, through `RecipeIndex` - they are what
+the Craft, Forge and NPC pages are built on, and `duration` is what lets the Forge page rank on
+profit per hour. `ForgeJobPricing` reads the same recipes to price a running forge job for the
+Status page. Item textures and skull profiles are read from the same pass, for the icons beside
+each name.
 
-**Not in use**: all of it. This is the next piece of work.
+**Not in use**: `katgrade`, `drops` and `trade`. The first is wanted for the Status page.
 
 `constants/` also holds ~40 prepared files (sacks, bonuses, gemstones, essence costs, garden,
 bestiary) that no current feature needs.
