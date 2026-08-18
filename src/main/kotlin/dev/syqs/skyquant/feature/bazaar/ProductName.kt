@@ -1,5 +1,7 @@
 package dev.syqs.skyquant.feature.bazaar
 
+import dev.syqs.skyquant.feature.bazaar.data.ItemIconIndex
+
 /**
  * Turns a bazaar product id into something readable.
  *
@@ -9,7 +11,17 @@ package dev.syqs.skyquant.feature.bazaar
 object ProductName {
 
     /** ENCHANTED_DIAMOND_BLOCK -> Enchanted Diamond Block */
-    fun of(productId: String): String = productId
+    fun of(productId: String): String = ItemIconIndex.nameFor(productId) ?: derive(productId)
+
+    /**
+     * The name worked out from the id alone, when the repository has nothing to say.
+     *
+     * Right for almost every product, since Hypixel's ids are the display name in capitals. The
+     * exceptions are the ten damage variants, which is why [of] asks the repository first: their
+     * ids carry a number where the name carries a word, and "Ink Sack:3" is not a thing in the
+     * game - it is Cocoa Beans.
+     */
+    private fun derive(productId: String): String = productId
         .split('_')
         .joinToString(" ") { word -> word.lowercase().replaceFirstChar { it.uppercase() } }
 

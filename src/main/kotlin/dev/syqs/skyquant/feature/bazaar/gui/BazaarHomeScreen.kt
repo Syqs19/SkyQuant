@@ -664,12 +664,23 @@ class BazaarHomeScreen(
     ): Int {
         val ready = item.remaining == WorkingCapitalSummary.READY
 
+        // An empty slot names no item, so there is nothing to draw and nothing to look up. Every
+        // other detail row is a real item, reached the same way its graph is - see the caveat on
+        // [ProductName.idOf] for why a miss here has to mean "no icon" rather than a wrong one.
+        val iconId = if (item.idle) null else ProductName.idOf(item.name)
+
+        // Indented only when there is no icon. The two-space indent exists to show that a detail
+        // row sits under its source, and an icon says the same thing more plainly - a group row
+        // never has one. Keeping both put the name two spaces further right than every other tab
+        // draws it, which read as a gap rather than as a hierarchy.
+        val detailName = if (iconId != null) item.name else "  ${item.name}"
+
         val bounds = table.drawRow(
             graphics, font, y,
             DataTable.Row.of(
                 BazaarColumns.PIN_KEY to DataTable.Cell(" ", Palette.FAINT),
                 BazaarColumns.NAME_KEY to
-                    DataTable.Cell("  ${item.name}", if (item.idle) Palette.FAINT else Palette.MUTED),
+                    DataTable.Cell(detailName, if (item.idle) Palette.FAINT else Palette.MUTED),
                 // The liquidity warning sits in the state column, which is empty on detail rows.
                 // Amber rather than red: it is a reason to check, not a verdict - a real demand
                 // spike looks identical from here.
@@ -688,7 +699,7 @@ class BazaarHomeScreen(
                         else -> Palette.MUTED
                     },
                 ),
-            ),
+            ).withIcon(iconId),
             mouseX, mouseY,
         )
 
@@ -703,13 +714,17 @@ class BazaarHomeScreen(
 
         if (nameLeft != null && nameRight != null) {
             item.progress?.let { progress ->
-                val barLeft = progressBarLeft(nameLeft, nameRight, font.width("  ${item.name}"))
+                // The icon's width counts as part of the text it precedes: the bar is placed
+                // after the name, and measuring only the characters would put it back under the
+                // icon's worth of the row - on top of the name it is supposed to follow.
+                val textWidth = font.width(detailName) + if (iconId != null) ItemIcon.WIDTH else 0
+                val barLeft = progressBarLeft(nameLeft, nameRight, textWidth)
                 drawProgressBar(graphics, progress, barLeft, y)
             }
         }
 
         // Only rows that name a real item open anything: an empty slot has no graph to show.
-        if (!item.idle) statusItemRows.add(StatusItemRow(bounds, ProductName.idOf(item.name)))
+        if (iconId != null) statusItemRows.add(StatusItemRow(bounds, iconId))
 
         return y + DataTable.ROW_HEIGHT
     }
@@ -889,7 +904,7 @@ class BazaarHomeScreen(
                     ),
                     "spread" to
                         DataTable.Cell(quote?.let { NumberFormats.percent(it.spreadPercent) } ?: "–", Palette.MUTED),
-                ),
+                ).withIcon(productId),
                 mouseX, mouseY,
             )
 
@@ -946,7 +961,7 @@ class BazaarHomeScreen(
                         Palette.MUTED,
                     ),
                     "vol7d" to DataTable.Cell(NumberFormats.volume(flip.weeklyVolume), Palette.MUTED),
-                ),
+                ).withIcon(flip.productId),
                 mouseX, mouseY,
             )
 
@@ -1071,7 +1086,7 @@ class BazaarHomeScreen(
                     "order" to profitCell(flip.orderProfit),
                     "total" to totalCell(flip),
                     "stock" to stockCell(flip),
-                ),
+                ).withIcon(flip.productId),
                 mouseX, mouseY,
             )
 
@@ -1225,7 +1240,7 @@ class BazaarHomeScreen(
                     // two recipes with the same margin can differ tenfold per hour.
                     put("margin", pairedMarginCell(craft))
                     put("vol7d", DataTable.Cell(NumberFormats.volume(craft.weeklyVolume), Palette.MUTED))
-                }.let(DataTable.Row::of),
+                }.let(DataTable.Row::of).withIcon(craft.outputId),
                 mouseX, mouseY,
             )
 

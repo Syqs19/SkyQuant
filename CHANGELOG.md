@@ -31,6 +31,9 @@ Oldest version first, newest at the bottom.
 + Added the Status tab, showing what you have working right now and how many coins are tied up in it.
 + Added forge timers that keep running after you leave the forge island.
 + Added a Filters button to the terminal, for putting away any figure you do not use on a tab.
++ Every item now shows its own icon beside its name, on the terminal, the price graph and the HUD.
++ Enchanted items shimmer in the tables the way they do in your inventory.
++ Added an Item Icons setting for the HUD, for anyone who wants the panel to stay plain text.
 
 ### Improvements
 
@@ -46,6 +49,7 @@ Oldest version first, newest at the bottom.
 + Fixed HUD positions and watchlist entries being lost after a crash or Alt+F4.
 + Fixed the Forge tab ranking on the asking price of items nobody was buying.
 + Fixed the in-game help still naming a command that no longer exists.
++ Fixed ten bazaar items reading as "Ink Sack:3" or "Sand:1" instead of Cocoa Beans and Red Sand.
 
 ### Technical Details
 

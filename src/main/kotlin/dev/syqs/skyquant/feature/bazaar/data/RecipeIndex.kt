@@ -122,6 +122,21 @@ object RecipeIndex {
             SkyQuantMod.LOGGER.info("Recipe cache was written by an older format, rebuilding")
         }
 
+        // Asked here rather than left to the caller: this runs from the world-join warmup and
+        // again whenever the terminal opens, and the check below is only meaningful once the
+        // icons have had their chance to come off disk. Reading it in one place is also what
+        // stops the terminal re-downloading the archive on every open.
+        ItemIconIndex.loadFromCache()
+
+        // The icons are filled by this pass, so a player whose recipes are already cached would
+        // otherwise never get them: the etag would match, GitHub would answer 304, and there
+        // would be no archive to walk. Dropping the etag costs one 9MB download, once, for
+        // anyone upgrading - and without it the icons simply never appear for them.
+        if (!ItemIconIndex.isLoaded) {
+            SkyQuantMod.LOGGER.info("No item icons cached, re-reading the repository to collect them")
+            etag = null
+        }
+
         thread(name = "skyquant-recipes-refresh", isDaemon = true) {
             try {
                 download()
@@ -133,6 +148,11 @@ object RecipeIndex {
 
     private fun download() {
         val found = mutableListOf<Recipe>()
+
+        // Collected on the same pass and handed to [ItemIconIndex] below. Every file here is
+        // already open and parsed, so reading three more fields costs nothing, where letting that
+        // index walk the archive itself would download the same 9MB a second time.
+        val icons = mutableMapOf<String, ItemIconData>()
 
         val result = GitHubArchive.walk(OWNER, REPO, BRANCH, etag) { entry ->
             if (!entry.path.endsWith(".json") || !entry.path.contains("/items/")) return@walk
@@ -146,6 +166,8 @@ object RecipeIndex {
                 ?: entry.path.substringAfterLast('/').removeSuffix(".json")
 
             found += Recipe.parseAll(root, itemId)
+
+            ItemIconData.parse(root)?.let { icons[itemId.uppercase()] = it }
         }
 
         when (result) {
@@ -156,6 +178,12 @@ object RecipeIndex {
                 SkyQuantMod.LOGGER.warn("NEU repository fetch failed, using cached recipes", result.cause)
 
             is GitHubArchive.Result.Downloaded -> {
+                // Handed over before the guard below, because the two indexes fail independently:
+                // a change to how recipes are written would empty `found` while every icon on the
+                // same pass parsed correctly, and returning early would throw those away too.
+                // ItemIconIndex keeps the matching guard for its own empty case.
+                ItemIconIndex.replace(icons)
+
                 if (found.isEmpty()) {
                     // A download that parsed to nothing means the repo's shape changed. An empty
                     // index would empty both pages while looking like a working refresh.

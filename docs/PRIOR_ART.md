@@ -143,3 +143,108 @@ player hides, at which point the bar walked across the row, away from the item i
 The general lesson: **anything drawn beside a name belongs off the left edge of its column**,
 because the left edge is the one that stays put. The button was also renamed from "Columns"
 to "Filters" and its hidden-count badge dropped, both on the user's judgement after using it.
+
+---
+
+## 2026-08-18 - Item icons beside names
+
+**Question.** The terminal names every item in text. Can we draw the item's own
+icon beside it, including the ones whose texture comes from Hypixel's own
+resource pack (`ItemModel: hypixel_skyblock:item/...`) or from a player head
+carrying a base64 texture?
+
+**Where we looked.** Firmament on branch `mc-26.1` - our exact Minecraft version -
+`repo/ItemCache.kt`, `util/mc/SkullItemData.kt`, `events/CustomItemModelEvent.kt`
+and `features/texturepack/CustomSkyBlockTextures.kt`. SkyHanni on `beta`, starting
+from the garden's money-per-hour display the user remembered
+(`features/garden/farming/CropMoneyDisplay.kt`) and following it down through
+`RenderableCollectionUtils.addItemStack` -> `NeuItems.getItemStack` ->
+`api/enoughupdates/EnoughUpdatesManager.neuItemToStack` ->
+`utils/ComponentUtils.convertToComponents`. Real item files from the NEU repo
+(`ENCHANTED_DIAMOND_BLOCK`, `TUNGSTEN_PLATE`, `HYPERION`,
+`SUPERIOR_DRAGON_HELMET`, `ENCHANTED_LAPIS_LAZULI`) to see what the data actually
+carries rather than assuming.
+
+**What survived verification.** Both mods set the same two components, in one line
+each: `DataComponents.ITEM_MODEL` from the NBT's `ItemModel` string, and
+`DataComponents.PROFILE` from `SkullOwner`. Two independent codebases with
+different architectures arriving at the identical answer is the strongest signal
+available, and it settles the question the research opened with: Hypixel has
+shipped an official server resource pack since SkyBlock 0.26, so those textures
+are **already in the client** while playing there. Nothing is downloaded, cached
+or shipped by us. Skull textures resolve through Minecraft's own skin cache for
+the same reason - the earlier plan to fetch textures over the network and cache
+them on disk was wrong and is abandoned.
+
+**What did not survive.** Firmament runs the whole 1.8.9 NBT through Mojang's
+`DataFixer` and pre-builds all ~8000 items across four threads. Correct for them,
+since they reconstruct the full item with stats and lore for a recipe browser. We
+draw a 16x16 icon for the ~20 rows on screen, so both are machinery for three
+fields. SkyHanni's lighter route - read the fields that matter, map the legacy id
+by hand - is the one that fits.
+
+**The real work, which the data revealed rather than the mods.** NEU stores 1.8.9
+item ids: `minecraft:skull` for every head, `minecraft:dye` with `damage: 4` for
+lapis, `red_flower` plus damage for each flower. SkyHanni carries a hand-written
+conversion table for these. Ours will be **derived from the repo itself** - every
+distinct `itemid`+`damage` pair the data actually contains - in keeping with how
+this project sets thresholds, and covered by a test that resolves each mapping
+against Minecraft's item registry, so an id that does not exist fails the build
+instead of drawing a plausible-but-wrong icon silently.
+
+**Licences.** SkyHanni is LGPL-2.1 and Firmament GPL-3.0, against our
+GPL-3.0-or-later. The approach was studied; no code is taken, and the id table is
+rebuilt from the NEU data rather than copied from theirs.
+
+**Decisions taken with the user.** Icons scale to the existing 12px row rather
+than growing it, so no tab loses a third of its visible rows - the same tradeoff
+SkyHanni takes with its `ITEM_FONT_SIZE`. An item with no resolvable icon draws
+**nothing**, leaving the name aligned with its neighbours, rather than a
+placeholder that adds noise or a base item that would render several forge
+products as identical sheets of paper. Firmament's existence check before using a
+model is kept, for the player who declines the server resource pack.
+
+---
+
+## 2026-08-18 - Icons outside SkyBlock
+
+**Question.** Item icons only show their real textures while connected to
+Hypixel. Could the client cache them once and draw them anywhere - in
+singleplayer, on another server, before joining?
+
+**What the logs and the disk say.** Two different mechanisms are involved, and
+they answer differently. Heads already work everywhere: they are drawn from
+`PROFILE` with the texture blob out of our own NEU cache, so they owe Hypixel
+nothing at runtime. Hypixel's own textures are another matter - the resource pack
+mounts as `server/00000000/242681e6-…` in the resource reload, and that `server/`
+prefix is the whole story: the client mounts it while connected to that server and
+unmounts it on leaving. The **file itself persists** in `run/downloads/`
+(17.8 MB, 1087 item definitions and 1351 textures under `assets/hypixel_skyblock/`),
+so nothing has to be re-downloaded - it is simply not mounted.
+
+**Prior art.** Firmament registers a resource pack of its own through Fabric's
+`ModPackResources` (`repo/RepoModResourcePack.kt`), pointed at its NEU checkout.
+The same mechanism could be pointed at Hypixel's downloaded pack, so the approach
+exists and is proven. Note what Firmament actually ships that way, though: **its
+own repository data**, not the server's pack.
+
+**Decided: leave it as it is.** Four costs, none of them hypothetical:
+
+1. It would redistribute Hypixel's assets from a mod published on Modrinth,
+   outside the context Hypixel serves them in. See `docs/API_RESOURCES.md` on how
+   carefully this project treats attribution and terms - this is the same class of
+   question and deserved the same caution.
+2. The path is not stable. `242681e6-…` is a UUID and `8a8e1b34…` a content hash,
+   both of which change when Hypixel updates the pack; finding it would mean
+   guessing at the newest file in a directory, with no way to be right if two ever
+   sat there.
+3. A permanently mounted pack applies to the **whole game**, not to our screens.
+   Hypixel's textures would appear in singleplayer and on unrelated servers, which
+   is a much larger change than the one being asked for.
+4. Textures would age silently: a texture Hypixel revised would stay stale in our
+   copy until the player reconnected, and nothing would say so.
+
+**What the player gets instead.** Outside SkyBlock the terminal still reads:
+prices, names and every head icon are there, since all three come from our own
+cache. Hypixel's textures fill in the moment they join. The user chose this after
+the trade-offs were laid out.

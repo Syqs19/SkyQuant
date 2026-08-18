@@ -505,10 +505,27 @@ class BazaarGraphScreen(
         // buttons in the top right instead of colliding with them - and cut where they begin,
         // since a name like "Enchanted Lapis Lazuli Block" otherwise runs straight into them.
         val titleSpace = rangeButtonBounds(BazaarHistory.Range.entries.first()).position().x() - panelLeft - 20
+
+        // Drawn at its native 16px here, unlike the tables. This is one icon on a heading rather
+        // than one per row, so there is no row height to fit inside and nothing to gain by
+        // shrinking it - and at this size the scaling that the tables accept would be visible.
+        val hasIcon = ItemIcon.stackFor(productId) != null
+        val titleX = if (hasIcon) {
+            ItemIcon.drawFullSize(graphics, productId, panelLeft + 12, panelTop + 7)
+            panelLeft + 12 + TITLE_ICON_WIDTH
+        } else {
+            panelLeft + 12
+        }
+
         graphics.text(
             font,
-            Component.literal(font.plainSubstrByWidth(ProductName.of(productId), titleSpace)),
-            panelLeft + 12,
+            Component.literal(
+                font.plainSubstrByWidth(
+                    ProductName.of(productId),
+                    titleSpace - if (hasIcon) TITLE_ICON_WIDTH else 0,
+                ),
+            ),
+            titleX,
             panelTop + 10,
             Palette.TEXT,
         )
@@ -866,6 +883,14 @@ class BazaarGraphScreen(
     companion object {
         // Colours come from Palette; the chart's own drawing constants live in PriceChart.
         private const val PANEL_CORNER_RADIUS = 6f
+        /**
+         * Space the title icon takes: the 16px sprite plus the gap before the name.
+         *
+         * Its own constant rather than [ItemIcon.WIDTH], which is sized for a table row - this
+         * icon is drawn unscaled, so borrowing that figure would leave the title overlapping it.
+         */
+        private const val TITLE_ICON_WIDTH = 16 + 4
+
         private const val PLOT_CORNER_RADIUS = 3f
 
         /** Same hairline and chamfer as the terminal, so the two screens read as one product. */

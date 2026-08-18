@@ -2,9 +2,11 @@ package dev.syqs.skyquant.feature.bazaar
 
 import dev.syqs.skyquant.SkyQuantMod
 import dev.syqs.skyquant.feature.bazaar.data.BazaarLivePrices
+import dev.syqs.skyquant.feature.bazaar.data.ItemIconIndex
 import dev.syqs.skyquant.feature.bazaar.data.NpcSellPrices
 import dev.syqs.skyquant.feature.bazaar.data.NpcShopPrices
 import dev.syqs.skyquant.feature.bazaar.data.RecipeIndex
+import dev.syqs.skyquant.feature.bazaar.gui.ItemIcon
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents
 
 /**
@@ -37,6 +39,15 @@ object MarketDataPreload {
     private var warmed = false
 
     fun register() {
+        // Built icons are derived from the index, so they have to go when it is replaced. Wired
+        // here rather than in the mod's initialiser because it is a detail of how these two
+        // stores relate, not something the rest of the mod has any reason to know about.
+        ItemIconIndex.onReplaced = ItemIcon::clearCache
+
+        // The other reason a built icon goes stale: Hypixel's textures arrive as a server pack,
+        // so whether a model exists depends on what is mounted right now.
+        ItemIcon.register()
+
         ClientTickEvents.END_CLIENT_TICK.register { minecraft ->
             val inWorld = minecraft.player != null
 
@@ -59,8 +70,9 @@ object MarketDataPreload {
             NpcSellPrices.loadOnce()
             NpcShopPrices.refresh()
 
-            // The recipe index behind the Craft and Forge pages. Cached with an etag, so an
-            // unchanged NEU repo answers in a few hundred bytes.
+            // The recipe index behind the Craft and Forge pages, which also fills the item
+            // icons on its way through the archive. Cached with an etag, so an unchanged NEU
+            // repo answers in a few hundred bytes.
             RecipeIndex.refresh()
         }
     }

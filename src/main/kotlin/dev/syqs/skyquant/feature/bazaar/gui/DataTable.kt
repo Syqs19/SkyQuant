@@ -147,9 +147,19 @@ class DataTable(
      * column with no cell draws blank, and a cell no column claims is dropped rather than shifting
      * its neighbours along.
      */
-    class Row private constructor(private val cells: Map<String, Cell>) {
+    class Row private constructor(
+        private val cells: Map<String, Cell>,
+        /**
+         * The Skyblock id whose icon is drawn beside this row's name, or null for a row that
+         * isn't one item - the Status page's source headings, a total.
+         */
+        val iconId: String? = null,
+    ) {
 
         fun cellFor(column: Column): Cell? = cells[column.key]
+
+        /** The same row, with an icon drawn at the left of its name column. */
+        fun withIcon(itemId: String?): Row = Row(cells, itemId)
 
         companion object {
             fun of(vararg cells: Pair<String, Cell>) = Row(cells.toMap())
@@ -196,14 +206,31 @@ class DataTable(
 
             val cell = row.cellFor(column) ?: continue
 
+            // The icon sits at the LEFT edge of the name column and the text starts after it.
+            // Left, because that is the edge that stays put: the name column is the one that
+            // absorbs the width freed by every column the player hides, so anything anchored to
+            // its right edge walks across the row as columns are put away.
+            val iconId = row.iconId?.takeIf { column.key == BazaarColumns.NAME_KEY }
+            val indent = if (iconId != null) ItemIcon.WIDTH else 0
+
+            if (iconId != null) {
+                ItemIcon.draw(graphics, iconId, columnLeft(index), y, ROW_HEIGHT)
+            }
+
             // Long names are cut rather than allowed to run into the next column, which would
-            // break the alignment the layout exists for.
-            val text = if (column.numeric) cell.text else font.plainSubstrByWidth(cell.text, column.width - 6)
+            // break the alignment the layout exists for. Measured against what the icon leaves,
+            // not the whole column, or a long name would reach exactly as far as it used to and
+            // overrun the figures by the icon's width.
+            val text = if (column.numeric) {
+                cell.text
+            } else {
+                font.plainSubstrByWidth(cell.text, column.width - 6 - indent)
+            }
 
             // The cell is positioned as a whole, then its runs are laid out left to right from
             // there, so a multi-part cell still right-aligns on its last character like every
             // single-part one beside it.
-            var partX = textX(font, index, text, column.numeric)
+            var partX = textX(font, index, text, column.numeric) + indent
 
             if (cell.parts.size == 1 || !column.numeric) {
                 graphics.text(font, Component.literal(text), partX, y + TEXT_OFFSET, cell.parts[0].color)

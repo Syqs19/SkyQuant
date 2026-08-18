@@ -166,6 +166,22 @@ src/main/kotlin/dev/syqs/skyquant/
         │   ├── ForgeJobPricing.kt     <- a forge job's ingredient cost and duration, from NEU
         │   ├── WorkingCapital.kt      <- the Status page's model: value, cost, profit per source
         │   ├── WorkingCapitalSummary.kt <- builds those rows from the widget or from the ledger
+        │   ├── ItemIconData.kt       <- what an NEU item file says about drawing and naming one
+        │   │                             item: legacy id, the ItemModel the server resource pack
+        │   │                             draws, a head's texture blob, the display name, and
+        │   │                             whether it shimmers. Two traps: the skull pattern anchors
+        │   │                             on `textures:[0:{`, NOT on SkullOwner (a several-hundred-
+        │   │                             character Signature sits between them), and the glint is
+        │   │                             the PRESENCE of `ench:[` - 1455 items declare it and only
+        │   │                             15 list an actual enchantment
+        │   ├── ItemIconIndex.kt      <- those fields per item, filled during RecipeIndex's pass
+        │   │                             rather than by a walk of its own, and cached on disk so
+        │   │                             an unchanged repo (304, no archive to walk) still has
+        │   │                             them. Reconciles the one punctuation difference between
+        │   │                             the two sources: the bazaar trades `INK_SACK:3`, the repo
+        │   │                             files it as `INK_SACK-3` (10 of 2124 products)
+        │   ├── LegacyItemIds.kt      <- 1.8.9 ids to modern ones. Deliberately short: 92% of items
+        │   │                             carry an ItemModel that overrides the id entirely
         │   └── ColumnPreferences.kt   <- which columns the player hid on each tab. Stores the
         │                                 HIDDEN keys, so an empty file shows everything and a
         │                                 column added later appears by default rather than
@@ -189,6 +205,20 @@ src/main/kotlin/dev/syqs/skyquant/
             │                             that skips one used to file every figure after it under
             │                             the wrong heading, silently, and hiding columns makes
             │                             that the ordinary case
+            ├── SkullProfile.kt        <- the Mojang profile carrying a head's skin. Its own file
+            │                             because it is pure authlib and so can be tested, unlike
+            │                             the rest of ItemIcon. GameProfile is a RECORD: build the
+            │                             PropertyMap first and pass it to the 3-arg constructor -
+            │                             putting a property in afterwards throws, inside the
+            │                             render pass, which crashes the client
+            ├── ItemIcon.kt            <- builds the ItemStack behind an icon and draws it. The
+            │                             whole feature is two components: ITEM_MODEL for Hypixel's
+            │                             own textures, PROFILE for heads. `hasModel` looks under
+            │                             `items/`, NOT `models/` - both exist and hold different
+            │                             things, and the wrong one discards every custom texture.
+            │                             Its cache is dropped on every resource reload: Hypixel's
+            │                             pack mounts only while connected, so "no such model" is
+            │                             an answer that has to be allowed to change mid-session
             ├── NumberFormats.kt       <- compact prices/volumes/percentages, shared by all screens
             ├── Sparkline.kt           <- word-sized price curve, no axes or labels
             ├── LineRenderState.kt     <- thick antialiased polyline
@@ -217,6 +247,15 @@ src/main/java/dev/syqs/skyquant/mixin/
   edge - correct while that column had a fixed width, and it walked ~110px across the row the
   first time two columns were hidden, ending up nowhere near the item it describes. Clamp the
   result against the column's right edge so a long name can't push the mark under the figures.
+
+- **Drawing an item icon**: `graphics.item(stack, x, y)` always draws 16x16, so a size is set by
+  scaling the matrix around the target corner - push and pop around the one call, or everything
+  drawn afterwards is scaled too. Two things carry no error when wrong: `ITEM_MODEL` resolves
+  against `assets/<ns>/items/`, not `models/`, and an icon drawn into the name column has to be
+  charged against the width the name is truncated to, or long names overrun the figures by
+  exactly the icon's width. Anything built per-item while drawing belongs behind a `runCatching`:
+  the data comes from a repository nobody here controls, and an exception in `extractRenderState`
+  is a crash rather than a missing icon.
 
 - **Base package**: `dev.syqs.skyquant`. All mod classes go in here (or in
   topic-specific sub-packages, e.g. `feature/`, `config/`, `hud/`, as the

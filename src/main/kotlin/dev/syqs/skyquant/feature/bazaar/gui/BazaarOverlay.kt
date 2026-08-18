@@ -78,7 +78,11 @@ object BazaarOverlay : HudElement {
         // panel of a believable size to place rather than a sliver.
         val names = BazaarWatchlist.pinned.maxOfOrNull { font.width(ProductName.short(it)) }
             ?: font.width(PLACEHOLDER_NAME)
-        var width = PADDING * 2 + names + GAP + PRICE_WIDTH + GAP + CHANGE_WIDTH
+        // The icon is added to the panel's width rather than taken out of the name's share: this
+        // panel sizes itself to its longest name, so charging the icon against that space would
+        // clip the very name the measurement exists to fit.
+        val icons = if (config.showIcons) ItemIcon.WIDTH else 0
+        var width = PADDING * 2 + icons + names + GAP + PRICE_WIDTH + GAP + CHANGE_WIDTH
 
         if (config.showSparkline) width += Sparkline.WIDTH + GAP
         if (config.showSpreadBar) width += SPREAD_BAR_WIDTH + GAP
@@ -240,7 +244,16 @@ object BazaarOverlay : HudElement {
 
         val textY = y + 2
 
-        graphics.text(font, Component.literal(ProductName.short(productId)), x + PADDING, textY, Palette.NAME)
+        // Off the panel's left padding, the one edge that doesn't move: everything else here is
+        // laid out from the right edge inward.
+        val nameX = if (config.showIcons) {
+            ItemIcon.draw(graphics, productId, x + PADDING, y, ROW_HEIGHT)
+            x + PADDING + ItemIcon.WIDTH
+        } else {
+            x + PADDING
+        }
+
+        graphics.text(font, Component.literal(ProductName.short(productId)), nameX, textY, Palette.NAME)
 
         // Laid out from the right edge inward so the columns line up down the panel regardless
         // of how long the names are.

@@ -197,6 +197,12 @@ class SkyQuantConfig : Config() {
         @JvmField
         var showSpreadBar: Boolean = true
 
+        @Expose
+        @ConfigOption(name = "Item Icons", desc = "Draw each item's icon beside its name.")
+        @ConfigEditorBoolean
+        @JvmField
+        var showIcons: Boolean = true
+
         // Position and scale live in HudRegistry rather than here: they're set by dragging in
         // the HUD editor, and a coordinate pair in the settings list is not something anyone
         // edits by hand.
