@@ -71,6 +71,18 @@ object CraftProfit {
         val durationSeconds: Long,
         /** The weakest link: how many of the scarcest ingredient trade in a week. */
         val weeklyVolume: Long,
+        /**
+         * How many of the **output** trade in a week - what you'd be selling.
+         *
+         * Separate from [weeklyVolume], which measures the ingredients, and the distinction is
+         * the whole point: AMBER_MATERIAL is made from ingredients that trade freely but sells
+         * fifteen units a week itself. Judging the row by its ingredients passed it, and the page
+         * ranked it top on a 10.0M ask nobody was paying.
+         *
+         * Zero when the output is priced from the auction house, which has no such figure -
+         * [hasOutlierListing] is the corresponding warning there.
+         */
+        val outputWeeklyVolume: Long = 0,
         /** True when the output is priced from the auction house rather than the bazaar. */
         val fromAuction: Boolean = false,
         /**
@@ -82,6 +94,16 @@ object CraftProfit {
         val hasOutlierListing: Boolean = false,
     ) {
         val isForge: Boolean get() = durationSeconds > 0
+
+        /**
+         * True when what this makes barely trades, so its profit is arithmetic rather than money.
+         *
+         * Auction-priced rows are excluded: they have no weekly figure, and [hasOutlierListing]
+         * is the warning that applies to them instead. Saying "thin" because a number is missing
+         * would put the mark on half the page and teach the player to ignore it.
+         */
+        val outputIsThin: Boolean
+            get() = !fromAuction && outputWeeklyVolume < Liquidity.THIN_WEEKLY_SALES
 
         // Each margin divides by the cost its own trade pays, not by a shared one: the fast trade
         // puts up more money for less return, and dividing both by the order cost would hide half
@@ -192,6 +214,8 @@ object CraftProfit {
             // Taking the output's own volume instead would flatter a recipe whose result sells
             // briskly but whose inputs nobody stocks.
             weeklyVolume = if (scarcest == Long.MAX_VALUE) 0 else scarcest,
+            // The output's own volume, which the ingredient figure above says nothing about.
+            outputWeeklyVolume = output.weeklyVolume,
         )
     }
 

@@ -140,10 +140,17 @@ object CraftSummary {
 
         // Ranked first, then used to decide what is still worth asking about: the weakest row on
         // a full page is the bar a new candidate has to clear.
+        // The ingredient filter is not enough on its own: it asks whether the inputs can be
+        // bought, and says nothing about whether the result can be sold. AMBER_MATERIAL is made
+        // from freely traded ingredients and sells fifteen a week itself, so it cleared this
+        // filter and led the Forge page. Thin outputs sort last instead.
         val ranked = recipes
             .mapNotNull(price)
             .filter { it.weeklyVolume >= minVolume && it.orderProfit > 0 }
-            .sortedByDescending { it.orderProfit }
+            .sortedWith(
+                compareBy<CraftProfit.Craft> { it.outputIsThin }
+                    .thenByDescending { it.orderProfit },
+            )
             .take(MAX_ROWS)
 
         // Outside the cache check on purpose: this is what *makes* the auction answers arrive, so
@@ -185,7 +192,16 @@ object CraftSummary {
         val ranked = recipes
             .mapNotNull(price)
             .filter { it.orderProfit > 0 }
-            .sortedByDescending { it.profitPerHour(it.orderProfit) }
+            // Thin outputs sort last whatever their profit, rather than being dropped. This page
+            // ranked AMBER_MATERIAL top on a 10.0M ask against a 1.1M best bid, on a market that
+            // had sold fifteen units in a week - every figure correct, the row worthless, and the
+            // ranking itself was what recommended it. Kept visible because a genuine demand spike
+            // looks identical from here and the player may know something the volume doesn't say;
+            // demoted because the page must not lead with it.
+            .sortedWith(
+                compareBy<CraftProfit.Craft> { it.outputIsThin }
+                    .thenByDescending { it.profitPerHour(it.orderProfit) },
+            )
             .take(MAX_ROWS)
 
         // The bar is read off `orderProfit` here too, even though the page ranks on profit per
