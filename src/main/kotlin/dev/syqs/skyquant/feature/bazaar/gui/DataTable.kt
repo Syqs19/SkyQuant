@@ -26,10 +26,17 @@ class DataTable(
      *
      * [description] is shown when the cursor rests on the header - the terms here ("spread",
      * "vol 7d") are jargon, and a player who doesn't know them has nowhere else to find out.
+     *
+     * [key] names the column for the life of the table: it is how a [Row] finds which cell belongs
+     * here, and how a hidden column is remembered between sessions. It is deliberately not the
+     * title - a title is copy and gets reworded, where changing a key would silently unhide every
+     * column a player had put away. Distinct from [sortKey] too, which is null on the columns that
+     * can't be sorted and so can't identify them.
      */
     class Column(
         val title: String,
         val width: Int,
+        val key: String,
         val numeric: Boolean = true,
         val description: String? = null,
         /** A narrow column of symbols (a pin, a rank) that the hover caret may take over. */
@@ -39,7 +46,14 @@ class DataTable(
          * sorted on, which is the right answer for a marker column or a name.
          */
         val sortKey: String? = null,
-    )
+    ) {
+        /**
+         * The same column, wider by [extra]. Used to hand the name column the width freed by a
+         * column the player hid, so the table still reaches the right edge of the panel.
+         */
+        fun widened(extra: Int): Column =
+            Column(title, width + extra, key, numeric, description, markerColumn, sortKey)
+    }
 
     /** Which column a table is ordered by, and which way. */
     data class Sort(val key: String, val descending: Boolean = true) {
@@ -121,6 +135,30 @@ class DataTable(
     }
 
     /**
+     * The cells of one row, each addressed by its column's [Column.key].
+     *
+     * Rows were a flat list matched to the columns by index, and the arrangement worked only while
+     * every row carried every column. It cost this project a workaround already - the NPC tables
+     * build their rows differently depending on whether the daily-total column exists, because a
+     * row one cell short filed every figure after it under the wrong heading, with the widths still
+     * adding up and nothing to see but wrong numbers under right titles.
+     *
+     * Once a column can be hidden that stops being an edge case, so the pairing is by name. A
+     * column with no cell draws blank, and a cell no column claims is dropped rather than shifting
+     * its neighbours along.
+     */
+    class Row private constructor(private val cells: Map<String, Cell>) {
+
+        fun cellFor(column: Column): Cell? = cells[column.key]
+
+        companion object {
+            fun of(vararg cells: Pair<String, Cell>) = Row(cells.toMap())
+
+            fun of(cells: Map<String, Cell>) = Row(cells)
+        }
+    }
+
+    /**
      * A data row, highlighted when hovered. Returns its bounds so callers can handle clicks
      * without recomputing the layout.
      */
@@ -128,7 +166,7 @@ class DataTable(
         graphics: GuiGraphicsExtractor,
         font: Font,
         y: Int,
-        cells: List<Cell>,
+        row: Row,
         mouseX: Int,
         mouseY: Int,
     ): ScreenRectangle {
@@ -143,10 +181,10 @@ class DataTable(
             graphics.fill(x, y, x + SELECTION_BAR_WIDTH, y + ROW_HEIGHT, Palette.ACCENT)
         }
 
-        for ((index, cell) in cells.withIndex()) {
-            if (index >= columns.size) break
-            val column = columns[index]
-
+        // Driven by the columns rather than by the cells: the columns are what is on screen, and a
+        // row that has nothing for one of them leaves it blank instead of sliding the next figure
+        // into its place.
+        for ((index, column) in columns.withIndex()) {
             // The caret takes the first column's place rather than sitting beside it. Drawing
             // both put two symbols in a 12px column, where the pin diamond and the caret ran
             // into each other - and the pin is the one that can be spared, since a hovered row
@@ -155,6 +193,8 @@ class DataTable(
                 graphics.text(font, CARET, x + SELECTION_BAR_WIDTH + 2, y + TEXT_OFFSET, Palette.ACCENT)
                 continue
             }
+
+            val cell = row.cellFor(column) ?: continue
 
             // Long names are cut rather than allowed to run into the next column, which would
             // break the alignment the layout exists for.
@@ -241,6 +281,28 @@ class DataTable(
      * bar aligned when a column width changes, where a hand-computed offset would silently drift.
      */
     fun columnRight(index: Int): Int = columnLefts[index] + columns[index].width
+
+    /**
+     * Where a column starts and ends, found by key rather than by position.
+     *
+     * Preferred now that a table's columns depend on what the player hid: an index is only correct
+     * while every column before it is present, which is a fact the caller cannot see. Both return
+     * null when that column isn't on screen, so the caller can leave its mark off rather than put
+     * it somewhere arbitrary.
+     *
+     * Which edge to ask for is a real choice. The name column is the one that absorbs the width
+     * freed by everything the player hides, so its **right** edge moves as columns are put away
+     * while its left edge stays put - anything meant to sit beside the text belongs off the left.
+     */
+    fun columnRight(key: String): Int? {
+        val index = columns.indexOfFirst { it.key == key }
+        return if (index < 0) null else columnRight(index)
+    }
+
+    fun columnLeft(key: String): Int? {
+        val index = columns.indexOfFirst { it.key == key }
+        return if (index < 0) null else columnLeft(index)
+    }
 
     /** Left edge for the text itself: flush left for names, flush right for figures. */
     private fun textX(font: Font, index: Int, text: String, numeric: Boolean): Int {

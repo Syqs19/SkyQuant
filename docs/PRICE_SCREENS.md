@@ -8,6 +8,13 @@ Almost every rule below was arrived at by measuring live data, and several repla
 looked sound but was wrong in game. Where that happened it is recorded, because the wrong version
 is usually the one that comes to mind first.
 
+**Every figure described here can be turned off.** The terminal's *Filters* button hides any column
+on the tab in view, per tab and remembered between sessions - so what follows describes the full
+table, not necessarily the one a given player sees. Two things stay whatever is asked: the item's
+name, and whichever column the table is currently sorted by (a ranking with no visible column to
+explain it has no way back). What a column *means* does not change when its neighbours are hidden;
+only the item name column widens to take the freed space.
+
 ---
 
 ## The one difference that shapes everything

@@ -165,7 +165,11 @@ src/main/kotlin/dev/syqs/skyquant/
         │   │                             (not the remaining text), so it survives leaving the isle
         │   ├── ForgeJobPricing.kt     <- a forge job's ingredient cost and duration, from NEU
         │   ├── WorkingCapital.kt      <- the Status page's model: value, cost, profit per source
-        │   └── WorkingCapitalSummary.kt <- builds those rows from the widget or from the ledger
+        │   ├── WorkingCapitalSummary.kt <- builds those rows from the widget or from the ledger
+        │   └── ColumnPreferences.kt   <- which columns the player hid on each tab. Stores the
+        │                                 HIDDEN keys, so an empty file shows everything and a
+        │                                 column added later appears by default rather than
+        │                                 arriving already hidden
         └── gui/
             ├── BazaarHomeScreen.kt    <- the terminal: seven tabs - Status, Watchlist, Flip, the
             │                             two NPC directions, Craft and Forge. Craft/Forge figures
@@ -180,7 +184,11 @@ src/main/kotlin/dev/syqs/skyquant/
             │                              of the line and drawn as a detached dot - see the
             │                              "Known issues" note on outliers)
             ├── BazaarOverlay.kt       <- the pinned-price panel drawn over the game
-            ├── DataTable.kt           <- column-aligned table shared by the terminal's tabs
+            ├── DataTable.kt           <- column-aligned table shared by the terminal's tabs.
+            │                             Cells are keyed to their column, NEVER positional: a row
+            │                             that skips one used to file every figure after it under
+            │                             the wrong heading, silently, and hiding columns makes
+            │                             that the ordinary case
             ├── NumberFormats.kt       <- compact prices/volumes/percentages, shared by all screens
             ├── Sparkline.kt           <- word-sized price curve, no axes or labels
             ├── LineRenderState.kt     <- thick antialiased polyline
@@ -202,6 +210,13 @@ src/main/java/dev/syqs/skyquant/mixin/
   with the plate (`radius + width`), or the two curves run at different offsets and the
   border thins to `1/√2` of a pixel along a corner and disappears; and the plate wants
   `softEdges = false`, since the anti-stair fringe fades the very line being drawn.
+
+- **Anything drawn beside a name belongs off the LEFT edge of its column.** The item-name column
+  is the one that absorbs the width freed by every column the player hides, so its right edge
+  moves and its left edge does not. The Status page's progress bar was positioned off the right
+  edge - correct while that column had a fixed width, and it walked ~110px across the row the
+  first time two columns were hidden, ending up nowhere near the item it describes. Clamp the
+  result against the column's right edge so a long name can't push the mark under the figures.
 
 - **Base package**: `dev.syqs.skyquant`. All mod classes go in here (or in
   topic-specific sub-packages, e.g. `feature/`, `config/`, `hud/`, as the

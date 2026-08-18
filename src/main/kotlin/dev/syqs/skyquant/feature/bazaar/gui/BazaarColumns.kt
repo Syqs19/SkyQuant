@@ -1,5 +1,6 @@
 package dev.syqs.skyquant.feature.bazaar.gui
 
+import dev.syqs.skyquant.feature.bazaar.data.ColumnPreferences
 import dev.syqs.skyquant.feature.bazaar.data.NpcDailyLimit
 
 /**
@@ -26,18 +27,20 @@ object BazaarColumns {
         val fixed = PIN + PRICE * 2 + CHANGE + SPREAD
 
         return listOf(
-            DataTable.Column("", PIN, numeric = false, markerColumn = true),
-            DataTable.Column("Item", (width - fixed).coerceAtLeast(60), numeric = false),
-            DataTable.Column("Buy", PRICE, description = "What an instant buy costs."),
-            DataTable.Column("Sell", PRICE, description = "What an instant sell pays."),
+            DataTable.Column("", PIN, key = PIN_KEY, numeric = false, markerColumn = true),
+            DataTable.Column("Item", (width - fixed).coerceAtLeast(60), key = NAME_KEY, numeric = false),
+            DataTable.Column("Buy", PRICE, key = "buy", description = "What an instant buy costs."),
+            DataTable.Column("Sell", PRICE, key = "sell", description = "What an instant sell pays."),
             DataTable.Column(
                 changeTitle,
                 CHANGE,
+                key = "change",
                 description = "How the buy price moved this session.",
             ),
             DataTable.Column(
                 "Spread",
                 SPREAD,
+                key = "spread",
                 description = "Gap between buy and sell, as a share of the buy price.",
             ),
         )
@@ -58,33 +61,38 @@ object BazaarColumns {
         val fixed = PIN + PRICE * 3 + SPREAD + VOLUME * 2
 
         return listOf(
-            DataTable.Column("", PIN, numeric = false, markerColumn = true),
-            DataTable.Column("Item", (width - fixed).coerceAtLeast(50), numeric = false),
+            DataTable.Column("", PIN, key = PIN_KEY, numeric = false, markerColumn = true),
+            DataTable.Column("Item", (width - fixed).coerceAtLeast(50), key = NAME_KEY, numeric = false),
             DataTable.Column(
                 "Buy @",
                 PRICE,
+                key = "buyAt",
                 description = "What your buy order has to beat: the cheapest anyone is asking.",
             ),
             DataTable.Column(
                 "Sell @",
                 PRICE,
+                key = "sellAt",
                 description = "What your sell offer has to beat: the best anyone is bidding.",
             ),
             DataTable.Column(
                 "Profit",
                 PRICE,
+                key = "profit",
                 description = "Coins kept per unit, after tax.",
                 sortKey = BazaarSort.PROFIT,
             ),
             DataTable.Column(
                 "Margin",
                 SPREAD,
+                key = "margin",
                 description = "Profit as a share of what you put in.",
                 sortKey = BazaarSort.MARGIN,
             ),
             DataTable.Column(
                 "Depth",
                 VOLUME,
+                key = "depth",
                 description = "Units you can trade before moving the price. " +
                     "The thinner side of the book, within 1% of the best.",
                 sortKey = BazaarSort.DEPTH,
@@ -92,6 +100,7 @@ object BazaarColumns {
             DataTable.Column(
                 "Vol 7d",
                 VOLUME,
+                key = VOLUME_KEY,
                 description = "Units traded this week. How fast the market refills.",
                 sortKey = BazaarSort.WEEKLY_VOLUME,
             ),
@@ -142,11 +151,12 @@ object BazaarColumns {
         val costNote = " Left: instant buy. Right: buy order."
 
         return buildList {
-            add(DataTable.Column("", PIN, markerColumn = true))
+            add(DataTable.Column("", PIN, key = PIN_KEY, markerColumn = true))
             add(
                 DataTable.Column(
                     "Item",
                     nameWidth,
+                    key = NAME_KEY,
                     numeric = false,
                     // "AH" marks an auction-house price: the median of the four cheapest listings,
                     // an estimate of what yours would fetch rather than a standing bid. "!" means
@@ -159,6 +169,7 @@ object BazaarColumns {
                 DataTable.Column(
                     "Cost",
                     PAIRED,
+                    key = "cost",
                     description = "What the ingredients cost." + costNote,
                     sortKey = BazaarSort.COST,
                 ),
@@ -167,6 +178,7 @@ object BazaarColumns {
                 DataTable.Column(
                     "Profit",
                     PAIRED,
+                    key = "profit",
                     description = "Coins kept per craft, after tax." + pairNote,
                     sortKey = BazaarSort.ORDER_PROFIT,
                 ),
@@ -176,6 +188,7 @@ object BazaarColumns {
                     DataTable.Column(
                         "Per hour",
                         PAIRED,
+                        key = "perHour",
                         description = "Profit per hour of forge time." + pairNote,
                         sortKey = BazaarSort.PER_HOUR,
                     ),
@@ -185,6 +198,7 @@ object BazaarColumns {
                     DataTable.Column(
                         "Margin",
                         MARGIN,
+                        key = "margin",
                         description = "Profit as a share of what you put in." + pairNote,
                         sortKey = BazaarSort.MARGIN,
                     ),
@@ -194,6 +208,7 @@ object BazaarColumns {
                 DataTable.Column(
                     "Vol 7d",
                     VOLUME,
+                    key = VOLUME_KEY,
                     description = "Weekly volume of the scarcest ingredient - " +
                         "what caps how often you can run this.",
                     sortKey = BazaarSort.WEEKLY_VOLUME,
@@ -255,18 +270,20 @@ object BazaarColumns {
         val fixed = PIN + NPC_PRICE * 3 + extraWidth
 
         return listOf(
-            DataTable.Column("", PIN, numeric = false, markerColumn = true),
-            DataTable.Column("Item", (width - fixed).coerceAtLeast(50), numeric = false),
-            DataTable.Column(costTitle, NPC_PRICE, description = costDescription),
+            DataTable.Column("", PIN, key = PIN_KEY, numeric = false, markerColumn = true),
+            DataTable.Column("Item", (width - fixed).coerceAtLeast(50), key = NAME_KEY, numeric = false),
+            DataTable.Column(costTitle, NPC_PRICE, key = "cost", description = costDescription),
             DataTable.Column(
                 instantTitle,
                 NPC_PRICE,
+                key = "instant",
                 description = instantDescription,
                 sortKey = BazaarSort.INSTANT_PROFIT,
             ),
             DataTable.Column(
                 orderTitle,
                 NPC_PRICE,
+                key = "order",
                 description = orderDescription,
                 sortKey = BazaarSort.ORDER_PROFIT,
             ),
@@ -280,6 +297,7 @@ object BazaarColumns {
                 DataTable.Column(
                     "Profit",
                     NPC_TOTAL,
+                    key = "total",
                     description = "A day's profit: $instantTitle then $orderTitle, each times " +
                         "the whole stock. " +
                         (
@@ -296,6 +314,7 @@ object BazaarColumns {
                 DataTable.Column(
                     "Stock",
                     NPC_STOCK,
+                    key = "stock",
                     numeric = false,
                     description = "Units per shop behind the total. " +
                         "○ assumed daily limit, ■ what the shop says is left, ×2 two shops.",
@@ -314,36 +333,82 @@ object BazaarColumns {
         val fixed = PIN + STATUS_STATE + PRICE * 2 + STATUS_PROFIT + STATUS_NEXT
 
         return listOf(
-            DataTable.Column("", PIN, numeric = false, markerColumn = true),
-            DataTable.Column("Source", (width - fixed).coerceAtLeast(MIN_NAME), numeric = false),
-            DataTable.Column("State", STATUS_STATE, numeric = false),
+            DataTable.Column("", PIN, key = PIN_KEY, numeric = false, markerColumn = true),
+            DataTable.Column("Source", (width - fixed).coerceAtLeast(MIN_NAME), key = NAME_KEY, numeric = false),
+            DataTable.Column("State", STATUS_STATE, key = "state", numeric = false),
             DataTable.Column(
                 "Cost",
                 PRICE,
+                key = "cost",
                 description = "What the ingredients cost when this was started, " +
                     "at that moment's prices. Not re-priced since.",
             ),
             DataTable.Column(
                 "Value",
                 PRICE,
+                key = "value",
                 description = "What selling this would put in your pocket: the standing bid, " +
                     "less the bazaar's cut.",
             ),
             DataTable.Column(
                 "Profit",
                 STATUS_PROFIT,
+                key = "profit",
                 description = "Value minus cost. Blank when either half isn't known, " +
                     "rather than counting the missing half as zero.",
             ),
             DataTable.Column(
                 "Next",
                 STATUS_NEXT,
+                key = "next",
                 numeric = false,
                 description = "How long until this is ready. Hypixel's own wording while the " +
                     "forge widget is visible, counted down from the clock afterwards.",
             ),
         )
     }
+
+    /**
+     * One table's columns with the player's hidden ones removed, and the name column re-solved.
+     *
+     * The re-solving is the whole job. Every layout above hands the name column whatever is left
+     * after the fixed ones, so dropping a column from the finished list would leave its width as a
+     * gap at the right edge - the figures would stop short of it and the table would read as
+     * half-drawn. Widening the name column by exactly what was freed keeps the right edge where it
+     * was, and gives the space to the one column that can always use more of it.
+     *
+     * Applied here rather than inside each builder so the five layouts keep one rule between them
+     * instead of five copies of the same arithmetic.
+     */
+    fun withHidden(
+        columns: List<DataTable.Column>,
+        hidden: Set<String>,
+        activeSort: String? = null,
+    ): List<DataTable.Column> {
+        if (hidden.isEmpty()) return columns
+
+        val kept = ColumnPreferences.visible(columns, hidden, activeSort)
+        if (kept.size == columns.size) return columns
+
+        val freed = columns.sumOf { it.width } - kept.sumOf { it.width }
+
+        return kept.map { column ->
+            if (column.key == NAME_KEY) column.widened(freed) else column
+        }
+    }
+
+    /**
+     * The two columns every table carries and none may hide.
+     *
+     * Shared constants rather than a literal per table so the rule "these can't be hidden" is one
+     * comparison instead of a list that a new tab could be left out of. Hiding either would leave
+     * rows of figures with nothing saying which item they describe.
+     */
+    const val PIN_KEY = "pin"
+    const val NAME_KEY = "name"
+
+    /** Spelled once because three tables carry a weekly-volume column under different wording. */
+    private const val VOLUME_KEY = "vol7d"
 
     // Fixed so figures stay in line across rows and between tabs.
     const val PIN = 12

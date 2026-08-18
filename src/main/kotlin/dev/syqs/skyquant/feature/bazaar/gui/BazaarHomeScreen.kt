@@ -8,6 +8,7 @@ import dev.syqs.skyquant.feature.bazaar.data.BazaarMarketSummary
 import dev.syqs.skyquant.feature.bazaar.data.BazaarPriceTrend
 import dev.syqs.skyquant.feature.bazaar.data.BazaarTax
 import dev.syqs.skyquant.feature.bazaar.data.BazaarWatchlist
+import dev.syqs.skyquant.feature.bazaar.data.ColumnPreferences
 import dev.syqs.skyquant.feature.bazaar.data.CraftProfit
 import dev.syqs.skyquant.feature.bazaar.data.AuctionSellPrice
 import dev.syqs.skyquant.feature.bazaar.data.CraftSummary
@@ -125,6 +126,23 @@ class BazaarHomeScreen(
     /** Header explanation to draw last, so it sits above the rows instead of behind them. */
     private var pendingTooltip: Pair<String, String>? = null
 
+    /**
+     * Whether the column chooser is open.
+     *
+     * Any click outside it closes it, which covers switching tabs too - it lists one table's
+     * columns, so carrying it across a switch would leave a panel of the previous tab's figures
+     * open over the new one.
+     */
+    private var chooserOpen = false
+
+    /** Chooser entries drawn this frame, each with the column key its checkbox toggles. */
+    private val chooserRows = mutableListOf<ChooserRow>()
+
+    private class ChooserRow(val bounds: ScreenRectangle, val columnKey: String)
+
+    /** Where the chooser's Reset sits this frame, or null while the chooser is closed. */
+    private var chooserReset: ScreenRectangle? = null
+
     /** Where the current tab's header was drawn, so a click can be tested against it. */
     private var headerY = 0
 
@@ -216,7 +234,7 @@ class BazaarHomeScreen(
             ),
         )
 
-        drawTitleBar(graphics, left, top)
+        drawTitleBar(graphics, left, top, mouseX, mouseY)
         drawTabs(graphics, pose, mouseX, mouseY)
 
         val contentTop = top + CONTENT_TOP
@@ -238,11 +256,15 @@ class BazaarHomeScreen(
 
         drawStatusBar(graphics, contentLeft, top + panel.height() - FOOTER_HEIGHT + 4, contentWidth)
 
+        // Over the table, since it is a panel the table would otherwise be drawn on top of. Still
+        // under the tooltip below, which has to clear everything including this.
+        if (chooserOpen) drawChooser(graphics, mouseX, mouseY) else clearChooserBounds()
+
         // Last, so it covers the table rather than being covered by it.
         pendingTooltip?.let { (title, description) -> drawTooltip(graphics, title, description, mouseX, mouseY) }
     }
 
-    private fun drawTitleBar(graphics: GuiGraphicsExtractor, left: Int, top: Int) {
+    private fun drawTitleBar(graphics: GuiGraphicsExtractor, left: Int, top: Int, mouseX: Int, mouseY: Int) {
         // The title strip sits a step lighter than the panel. Depth here comes from stacked
         // surfaces rather than a drawn frame: the eye reads the change in lightness as a layer,
         // and every border avoided is geometry the split-phase renderer doesn't have to carry.
@@ -282,6 +304,8 @@ class BazaarHomeScreen(
             },
         )
 
+        drawChooserButton(graphics, left, top, mouseX, mouseY)
+
         // The mod's name, centred on the panel rather than tucked into the left corner: with the
         // credit moved to the footer this strip carries two things, and a centred title reads as
         // the heading of the whole terminal instead of as the first of a row of labels.
@@ -295,6 +319,179 @@ class BazaarHomeScreen(
         if (titleX + font.width(title) + TITLE_GAP < statusX) {
             graphics.text(font, Component.literal(title), titleX, top + 10, Palette.NAME)
         }
+    }
+
+    /**
+     * Where the chooser button sits: the left of the title bar, which was empty.
+     *
+     * Not in the tab strip, where it would belong by subject: seven tabs at 64px leave 36px before
+     * the panel edge, and "COLUMNS ▾" needs 54. The title bar has 216px doing nothing to the left
+     * of the centred title.
+     */
+    private fun chooserButtonBounds(): ScreenRectangle = ScreenRectangle(
+        panel.position().x() + PADDING,
+        panel.position().y() + 6,
+        font.width(CHOOSER_LABEL) + CHOOSER_BUTTON_PADDING * 2,
+        CHOOSER_BUTTON_HEIGHT,
+    )
+
+    /**
+     * The control that opens the column chooser.
+     *
+     * Kept in the terminal rather than in the settings screen so the table is in view while its
+     * columns are being chosen - and because a player who never opens `/skyquant` would otherwise
+     * never learn that any of this can be put away.
+     */
+    private fun drawChooserButton(graphics: GuiGraphicsExtractor, left: Int, top: Int, mouseX: Int, mouseY: Int) {
+        val box = chooserButtonBounds()
+        val hovered = box.containsPoint(mouseX, mouseY)
+
+        if (hovered || chooserOpen) {
+            graphics.fill(
+                box.position().x(), box.position().y(),
+                box.position().x() + box.width(), box.position().y() + box.height(),
+                Palette.ROW_HOVER,
+            )
+        }
+
+        graphics.text(
+            font,
+            Component.literal(CHOOSER_LABEL),
+            box.position().x() + CHOOSER_BUTTON_PADDING,
+            box.position().y() + (box.height() - 8) / 2,
+            if (chooserOpen || hovered) Palette.TEXT else Palette.MUTED,
+        )
+    }
+
+    /**
+     * The chooser itself: one checkbox per column this tab could hide, and a Reset.
+     *
+     * Drawn after the table rather than with the title bar, so it covers the rows instead of being
+     * painted behind them - the same ordering [pendingTooltip] needs, and for the same reason.
+     */
+    private fun drawChooser(graphics: GuiGraphicsExtractor, mouseX: Int, mouseY: Int) {
+        chooserRows.clear()
+        chooserReset = null
+
+        val hideable = ColumnPreferences.hideable(allColumnsFor(tab))
+        if (hideable.isEmpty()) return
+
+        val hidden = ColumnPreferences.hiddenOn(tab.name)
+        val sortedKey = sortedColumnKey()
+
+        // Measured with the sort arrow on every title, not just the one that has it: the arrow
+        // moves from entry to entry as the player re-sorts, and a panel that resized under them
+        // each time would be worse than one a few pixels wider than it needs.
+        val arrow = DataTable.sortArrow(active = true, descending = true)
+        val entryWidth = (hideable.maxOf { font.width(it.title + arrow) } + CHOOSER_ENTRY_EXTRA)
+            .coerceAtLeast(CHOOSER_MIN_WIDTH)
+        val x = chooserButtonBounds().position().x()
+        val y = chooserButtonBounds().position().y() + CHOOSER_BUTTON_HEIGHT + 2
+        val boxHeight = (hideable.size + 1) * CHOOSER_ROW_HEIGHT + CHOOSER_ENTRY_EXTRA / 2
+
+        graphics.fill(x, y, x + entryWidth, y + boxHeight, Palette.OVERLAY_BACKGROUND)
+
+        var rowY = y + 4
+        for (column in hideable) {
+            val bounds = ScreenRectangle(x, rowY, entryWidth, CHOOSER_ROW_HEIGHT)
+            val hovered = bounds.containsPoint(mouseX, mouseY)
+
+            if (hovered) graphics.fill(x, rowY, x + entryWidth, rowY + CHOOSER_ROW_HEIGHT, Palette.ROW_HOVER)
+
+            // A column can be hidden in the saved set and still on screen, because the sort it
+            // carries outranks the choice. Ticking it by what is actually drawn rather than by
+            // what is saved keeps the box agreeing with the table beside it.
+            val onScreen = column.key !in hidden || column.key == sortedKey
+
+            graphics.text(
+                font,
+                Component.literal(if (onScreen) "☑" else "☐"),
+                x + 4,
+                rowY + 2,
+                if (onScreen) Palette.ACCENT else Palette.FAINT,
+            )
+            // The column the table is ordered by can't be put away, so it says so rather than
+            // ignoring the click in silence. The arrow is the one the header already uses for the
+            // active sort, which is where the player just came from.
+            val locked = column.key == sortedKey
+            val label = if (locked) "${column.title} ▼" else column.title
+
+            graphics.text(
+                font,
+                Component.literal(label),
+                x + CHOOSER_TEXT_INSET,
+                rowY + 2,
+                // Greyed while the sort is what holds it: clicking does nothing until the table is
+                // sorted by something else, and the colour says so before the click.
+                if (locked) Palette.FAINT else if (onScreen) Palette.TEXT else Palette.MUTED,
+            )
+
+            chooserRows.add(ChooserRow(bounds, column.key))
+            rowY += CHOOSER_ROW_HEIGHT
+        }
+
+        val resetBounds = ScreenRectangle(x, rowY, entryWidth, CHOOSER_ROW_HEIGHT)
+        if (resetBounds.containsPoint(mouseX, mouseY)) {
+            graphics.fill(x, rowY, x + entryWidth, rowY + CHOOSER_ROW_HEIGHT, Palette.ROW_HOVER)
+        }
+        graphics.fill(x + 4, rowY, x + entryWidth - 4, rowY + 1, Palette.RULE)
+        graphics.text(font, Component.literal("Show all"), x + CHOOSER_TEXT_INSET, rowY + 2, Palette.MUTED)
+        chooserReset = resetBounds
+    }
+
+    /**
+     * The key of the column carrying the current tab's sort, or null when nothing is sorted.
+     *
+     * Translates between the two naming schemes that meet here: a column is identified by its
+     * [DataTable.Column.key] ("profit") and orders by its [DataTable.Column.sortKey]
+     * ("orderProfit"), and on several tables the two differ. Done in one place so the chooser's
+     * drawing and its click handling cannot come to different answers.
+     */
+    private fun sortedColumnKey(): String? {
+        val sortKey = sortOf(tab)?.key ?: return null
+        return allColumnsFor(tab).firstOrNull { it.sortKey == sortKey }?.key
+    }
+
+    /**
+     * A click inside the open chooser. Returns false when it landed elsewhere.
+     *
+     * The chooser stays open after a tick: hiding columns is done a few at a time, and closing
+     * after each one would mean reopening the panel to make the next choice - while the point of
+     * putting the control on the screen was to see the table change as it is chosen.
+     */
+    private fun handleChooserClick(x: Int, y: Int): Boolean {
+        chooserReset?.let { bounds ->
+            if (bounds.containsPoint(x, y)) {
+                ColumnPreferences.reset(tab.name)
+                return true
+            }
+        }
+
+        for (row in chooserRows) {
+            if (!row.bounds.containsPoint(x, y)) continue
+
+            // A column the table is sorted by ignores the click, since [ColumnPreferences.visible]
+            // would put it straight back. Saving the choice anyway would be worse than doing
+            // nothing: the tick would stay on, and the column would vanish later without warning,
+            // when the player next sorted by something else.
+            if (row.columnKey == sortedColumnKey()) return true
+
+            ColumnPreferences.toggle(tab.name, row.columnKey)
+            return true
+        }
+
+        return false
+    }
+
+    /**
+     * Forgets where the chooser's entries were, for the frames it isn't drawn.
+     *
+     * Without this the bounds from the last open frame would linger, and a click on a row of the
+     * table underneath would still land on a checkbox that is no longer on screen.
+     */
+    private fun clearChooserBounds() {
+        chooserRows.clear()
+        chooserReset = null
     }
 
     /**
@@ -410,7 +607,7 @@ class BazaarHomeScreen(
             WorkingCapitalSummary.rowToExpand(capital)?.let { expandedGroups.add(it) }
         }
 
-        val table = DataTable(BazaarColumns.status(width), x, width)
+        val table = DataTable(visibleColumnsFor(Tab.STATUS), x, width)
         var y = table.drawHeader(graphics, font, top)
 
         table.headerTooltipAt(font, top, mouseX, mouseY)?.let { pendingTooltip = it }
@@ -423,17 +620,17 @@ class BazaarHomeScreen(
 
             val bounds = table.drawRow(
                 graphics, font, y,
-                listOf(
-                    DataTable.Cell(
+                DataTable.Row.of(
+                    BazaarColumns.PIN_KEY to DataTable.Cell(
                         if (!hasDetail) " " else if (expanded) "▾" else "▸",
                         Palette.FAINT,
                     ),
-                    DataTable.Cell(group.label, Palette.NAME),
-                    statusStateCell(group),
-                    moneyCell(group.cost, Palette.MUTED),
-                    moneyCell(group.value, Palette.TEXT),
-                    profitCell(group.profit, group.anyThin),
-                    DataTable.Cell(nextEventOf(group) ?: "–", Palette.MUTED),
+                    BazaarColumns.NAME_KEY to DataTable.Cell(group.label, Palette.NAME),
+                    "state" to statusStateCell(group),
+                    "cost" to moneyCell(group.cost, Palette.MUTED),
+                    "value" to moneyCell(group.value, Palette.TEXT),
+                    "profit" to profitCell(group.profit, group.anyThin),
+                    "next" to DataTable.Cell(nextEventOf(group) ?: "–", Palette.MUTED),
                 ),
                 mouseX, mouseY,
             )
@@ -469,20 +666,21 @@ class BazaarHomeScreen(
 
         val bounds = table.drawRow(
             graphics, font, y,
-            listOf(
-                DataTable.Cell(" ", Palette.FAINT),
-                DataTable.Cell("  ${item.name}", if (item.idle) Palette.FAINT else Palette.MUTED),
+            DataTable.Row.of(
+                BazaarColumns.PIN_KEY to DataTable.Cell(" ", Palette.FAINT),
+                BazaarColumns.NAME_KEY to
+                    DataTable.Cell("  ${item.name}", if (item.idle) Palette.FAINT else Palette.MUTED),
                 // The liquidity warning sits in the state column, which is empty on detail rows.
                 // Amber rather than red: it is a reason to check, not a verdict - a real demand
                 // spike looks identical from here.
-                if (item.thin) DataTable.Cell("THIN", Palette.STALE)
+                "state" to if (item.thin) DataTable.Cell("THIN", Palette.STALE)
                 else DataTable.Cell("", Palette.MUTED),
-                moneyCell(item.cost, Palette.FAINT),
-                moneyCell(item.value, Palette.MUTED),
-                profitCell(item.profit, item.thin),
+                "cost" to moneyCell(item.cost, Palette.FAINT),
+                "value" to moneyCell(item.value, Palette.MUTED),
+                "profit" to profitCell(item.profit, item.thin),
                 // Something finished is the one thing on this page worth acting on now, so it is
                 // the only detail cell that gets the positive colour.
-                DataTable.Cell(
+                "next" to DataTable.Cell(
                     item.remaining ?: "–",
                     when {
                         ready -> Palette.POSITIVE
@@ -494,9 +692,20 @@ class BazaarHomeScreen(
             mouseX, mouseY,
         )
 
-        // columnRight is already absolute, so the row's own x isn't added again.
-        item.progress?.let {
-            drawProgressBar(graphics, it, table.columnRight(NAME_COLUMN) - PROGRESS_GAP, y)
+        // Placed after the name text, not off the right edge of its column. The name column is the
+        // one that absorbs whatever the player hides, so its right edge slides away as columns are
+        // put away - which walked the bar across the screen, away from the item it belongs to.
+        // Measuring the text keeps it where it reads as part of the row.
+        //
+        // Both edges are already absolute, so the row's own x isn't added again.
+        val nameLeft = table.columnLeft(BazaarColumns.NAME_KEY)
+        val nameRight = table.columnRight(BazaarColumns.NAME_KEY)
+
+        if (nameLeft != null && nameRight != null) {
+            item.progress?.let { progress ->
+                val barLeft = progressBarLeft(nameLeft, nameRight, font.width("  ${item.name}"))
+                drawProgressBar(graphics, progress, barLeft, y)
+            }
         }
 
         // Only rows that name a real item open anything: an empty slot has no graph to show.
@@ -519,10 +728,9 @@ class BazaarHomeScreen(
     private fun drawProgressBar(
         graphics: GuiGraphicsExtractor,
         progress: Double,
-        nameRight: Int,
+        left: Int,
         y: Int,
     ) {
-        val left = nameRight - PROGRESS_WIDTH
         val top = y + (DataTable.ROW_HEIGHT - PROGRESS_HEIGHT) / 2
 
         graphics.fill(left, top, left + PROGRESS_WIDTH, top + PROGRESS_HEIGHT, Palette.RULE)
@@ -652,7 +860,7 @@ class BazaarHomeScreen(
             return
         }
 
-        val table = DataTable(BazaarColumns.watchlist(width, changeColumnTitle()), x, width)
+        val table = DataTable(visibleColumnsFor(Tab.WATCH), x, width)
         var y = table.drawHeader(graphics, font, top)
 
         table.headerTooltipAt(font, top, mouseX, mouseY)?.let { pendingTooltip = it }
@@ -669,16 +877,18 @@ class BazaarHomeScreen(
 
             val bounds = table.drawRow(
                 graphics, font, y,
-                listOf(
-                    DataTable.Cell(if (pinned) "◆" else "◇", if (pinned) Palette.ACCENT else Palette.FAINT),
-                    DataTable.Cell(ProductName.of(productId), Palette.NAME),
-                    DataTable.Cell(quote?.let { NumberFormats.price(it.buyPrice) } ?: "…", Palette.TEXT),
-                    DataTable.Cell(quote?.let { NumberFormats.price(it.sellPrice) } ?: "…", Palette.MUTED),
-                    DataTable.Cell(
+                DataTable.Row.of(
+                    BazaarColumns.PIN_KEY to
+                        DataTable.Cell(if (pinned) "◆" else "◇", if (pinned) Palette.ACCENT else Palette.FAINT),
+                    BazaarColumns.NAME_KEY to DataTable.Cell(ProductName.of(productId), Palette.NAME),
+                    "buy" to DataTable.Cell(quote?.let { NumberFormats.price(it.buyPrice) } ?: "…", Palette.TEXT),
+                    "sell" to DataTable.Cell(quote?.let { NumberFormats.price(it.sellPrice) } ?: "…", Palette.MUTED),
+                    "change" to DataTable.Cell(
                         change?.let { NumberFormats.change(it) } ?: "–",
                         change?.let { if (it >= 0) Palette.POSITIVE else Palette.NEGATIVE } ?: Palette.FAINT,
                     ),
-                    DataTable.Cell(quote?.let { NumberFormats.percent(it.spreadPercent) } ?: "–", Palette.MUTED),
+                    "spread" to
+                        DataTable.Cell(quote?.let { NumberFormats.percent(it.spreadPercent) } ?: "–", Palette.MUTED),
                 ),
                 mouseX, mouseY,
             )
@@ -711,7 +921,7 @@ class BazaarHomeScreen(
             return
         }
 
-        val table = DataTable(BazaarColumns.flips(width), x, width)
+        val table = DataTable(visibleColumnsFor(Tab.FLIP), x, width)
         var y = table.drawHeader(graphics, font, top, sort, mouseX, mouseY)
 
         table.headerTooltipAt(font, top, mouseX, mouseY)?.let { pendingTooltip = it }
@@ -722,19 +932,20 @@ class BazaarHomeScreen(
         for (flip in flips.drop(scroll).take(visible)) {
             val bounds = table.drawRow(
                 graphics, font, y,
-                listOf(
-                    DataTable.Cell(if (BazaarWatchlist.isTracked(flip.productId)) "◆" else "", Palette.ACCENT),
-                    DataTable.Cell(ProductName.short(flip.productId), Palette.NAME),
-                    DataTable.Cell(NumberFormats.price(flip.buyAt), Palette.TEXT),
-                    DataTable.Cell(NumberFormats.price(flip.sellAt), Palette.TEXT),
-                    DataTable.Cell("▲ " + NumberFormats.price(flip.profitPerUnit), Palette.POSITIVE),
-                    DataTable.Cell(NumberFormats.percentCompact(flip.marginPercent), Palette.POSITIVE),
+                DataTable.Row.of(
+                    BazaarColumns.PIN_KEY to
+                        DataTable.Cell(if (BazaarWatchlist.isTracked(flip.productId)) "◆" else "", Palette.ACCENT),
+                    BazaarColumns.NAME_KEY to DataTable.Cell(ProductName.short(flip.productId), Palette.NAME),
+                    "buyAt" to DataTable.Cell(NumberFormats.price(flip.buyAt), Palette.TEXT),
+                    "sellAt" to DataTable.Cell(NumberFormats.price(flip.sellAt), Palette.TEXT),
+                    "profit" to DataTable.Cell("▲ " + NumberFormats.price(flip.profitPerUnit), Palette.POSITIVE),
+                    "margin" to DataTable.Cell(NumberFormats.percentCompact(flip.marginPercent), Palette.POSITIVE),
                     // The shallower side, since that is what caps how much of this is real.
-                    DataTable.Cell(
+                    "depth" to DataTable.Cell(
                         NumberFormats.volume(minOf(flip.buyDepth, flip.sellDepth)),
                         Palette.MUTED,
                     ),
-                    DataTable.Cell(NumberFormats.volume(flip.weeklyVolume), Palette.MUTED),
+                    "vol7d" to DataTable.Cell(NumberFormats.volume(flip.weeklyVolume), Palette.MUTED),
                 ),
                 mouseX, mouseY,
             )
@@ -773,7 +984,7 @@ class BazaarHomeScreen(
         }
 
         drawFlipTable(
-            graphics, Tab.NPC_BUY, BazaarColumns.npcToBazaar(width), x, top, width, bottom, mouseX, mouseY,
+            graphics, Tab.NPC_BUY, visibleColumnsFor(Tab.NPC_BUY), x, top, width, bottom, mouseX, mouseY,
             flips = NpcFlipSummary.npcToBazaar(LIST_ROWS),
             emptyMessage = listOf(
                 "Nothing worth buying from a shop right now." to Palette.MUTED,
@@ -800,7 +1011,7 @@ class BazaarHomeScreen(
         }
 
         drawFlipTable(
-            graphics, Tab.NPC_SELL, BazaarColumns.bazaarToNpc(width), x, top, width, bottom, mouseX, mouseY,
+            graphics, Tab.NPC_SELL, visibleColumnsFor(Tab.NPC_SELL), x, top, width, bottom, mouseX, mouseY,
             flips = NpcFlipSummary.bazaarToNpc(LIST_ROWS),
             emptyMessage = listOf(
                 "Nothing worth selling to an NPC right now." to Palette.MUTED,
@@ -843,25 +1054,24 @@ class BazaarHomeScreen(
         val visible = visibleRows(top, bottom)
         maxScroll = (sorted.size - visible).coerceAtLeast(0)
 
-        // Driven by the columns rather than fixed at seven: the BZ → NPC tab carries neither the
-        // daily total nor the Stock column, and a row with more cells than there are columns
-        // silently shifts every figure after it under the wrong heading.
-        val hasDailyTotal = columns.any { it.title == "Profit" }
-
+        // The daily total and the Stock column exist only on NPC → BZ. Both are offered
+        // unconditionally: the table pairs cells to columns by key, so the ones this tab doesn't
+        // carry are dropped rather than shifting the figures after them under the wrong heading -
+        // which is what a positional row did here, and why this used to inspect the column titles
+        // to decide what to build.
         for (flip in sorted.drop(scroll).take(visible)) {
             val bounds = table.drawRow(
                 graphics, font, y,
-                buildList {
-                    add(DataTable.Cell(if (BazaarWatchlist.isTracked(flip.productId)) "◆" else "", Palette.ACCENT))
-                    add(DataTable.Cell(ProductName.short(flip.productId), Palette.NAME))
-                    add(DataTable.Cell(NumberFormats.price(flip.cost), Palette.TEXT))
-                    add(profitCell(flip.instantProfit))
-                    add(profitCell(flip.orderProfit))
-                    if (hasDailyTotal) {
-                        add(totalCell(flip))
-                        add(stockCell(flip))
-                    }
-                },
+                DataTable.Row.of(
+                    BazaarColumns.PIN_KEY to
+                        DataTable.Cell(if (BazaarWatchlist.isTracked(flip.productId)) "◆" else "", Palette.ACCENT),
+                    BazaarColumns.NAME_KEY to DataTable.Cell(ProductName.short(flip.productId), Palette.NAME),
+                    "cost" to DataTable.Cell(NumberFormats.price(flip.cost), Palette.TEXT),
+                    "instant" to profitCell(flip.instantProfit),
+                    "order" to profitCell(flip.orderProfit),
+                    "total" to totalCell(flip),
+                    "stock" to stockCell(flip),
+                ),
                 mouseX, mouseY,
             )
 
@@ -888,7 +1098,7 @@ class BazaarHomeScreen(
         mouseX: Int,
         mouseY: Int,
     ) = drawCraftTable(
-        graphics, Tab.CRAFT, BazaarColumns.crafts(width, forge = false),
+        graphics, Tab.CRAFT, visibleColumnsFor(Tab.CRAFT),
         x, top, width, bottom, mouseX, mouseY,
         crafts = CraftSummary.crafts(),
         emptyMessage = recipeEmptyMessage(),
@@ -910,7 +1120,7 @@ class BazaarHomeScreen(
         mouseX: Int,
         mouseY: Int,
     ) = drawCraftTable(
-        graphics, Tab.FORGE, BazaarColumns.crafts(width, forge = true),
+        graphics, Tab.FORGE, visibleColumnsFor(Tab.FORGE),
         x, top, width, bottom, mouseX, mouseY,
         crafts = CraftSummary.forges(),
         emptyMessage = recipeEmptyMessage(),
@@ -987,31 +1197,35 @@ class BazaarHomeScreen(
         for (craft in sorted.drop(scroll).take(visible)) {
             val bounds = table.drawRow(
                 graphics, font, y,
-                buildList {
-                    add(DataTable.Cell(if (BazaarWatchlist.isTracked(craft.outputId)) "◆" else "", Palette.ACCENT))
-                    add(craftNameCell(craft))
-                    add(pairedCostCell(craft))
+                buildMap {
+                    put(
+                        BazaarColumns.PIN_KEY,
+                        DataTable.Cell(if (BazaarWatchlist.isTracked(craft.outputId)) "◆" else "", Palette.ACCENT),
+                    )
+                    put(BazaarColumns.NAME_KEY, craftNameCell(craft))
+                    put("cost", pairedCostCell(craft))
                     // The Forge page's left-hand figure is the mixed trade - ingredients bought
                     // outright, result sold on an offer - because that is what a recipe with a
                     // wait in it actually calls for. See [CraftProfit.Craft.forgeProfit]. On the
                     // Craft page the pair stays fast-against-patient, where it describes two
                     // trades somebody could really choose between.
                     val fastFigure = if (isForge) craft.forgeProfit else craft.instantProfit
-                    add(pairedProfitCell(fastFigure, craft.orderProfit))
-                    if (isForge) {
-                        add(
-                            pairedProfitCell(
-                                craft.profitPerHour(fastFigure),
-                                craft.profitPerHour(craft.orderProfit),
-                            ),
-                        )
-                    }
+                    put("profit", pairedProfitCell(fastFigure, craft.orderProfit))
+                    // Both are offered whatever the page: the table takes the ones its columns
+                    // name and drops the rest, so neither has to be guarded on which tab this is.
+                    put(
+                        "perHour",
+                        pairedProfitCell(
+                            craft.profitPerHour(fastFigure),
+                            craft.profitPerHour(craft.orderProfit),
+                        ),
+                    )
                     // Margin is a crafting question. On the Forge page the ranking is the rate,
                     // and a percentage of the money put up says nothing about a slot's worth -
                     // two recipes with the same margin can differ tenfold per hour.
-                    if (!isForge) add(pairedMarginCell(craft))
-                    add(DataTable.Cell(NumberFormats.volume(craft.weeklyVolume), Palette.MUTED))
-                },
+                    put("margin", pairedMarginCell(craft))
+                    put("vol7d", DataTable.Cell(NumberFormats.volume(craft.weeklyVolume), Palette.MUTED))
+                }.let(DataTable.Row::of),
                 mouseX, mouseY,
             )
 
@@ -1287,6 +1501,20 @@ class BazaarHomeScreen(
         val x = event.x().toInt()
         val y = event.y().toInt()
 
+        // The chooser first, before anything underneath it. It is drawn over the table, so a click
+        // inside it has to be claimed here or the header below would read it as a sort.
+        if (chooserOpen && handleChooserClick(x, y)) return true
+
+        if (chooserButtonBounds().containsPoint(x, y)) {
+            chooserOpen = !chooserOpen
+            return true
+        }
+
+        // Any click outside the open chooser closes it, the way a menu behaves everywhere else -
+        // and then goes on to do what it was pointing at, rather than being swallowed as the cost
+        // of dismissing the panel.
+        chooserOpen = false
+
         for (option in Tab.entries) {
             if (tabBounds(option).containsPoint(x, y)) {
                 tab = option
@@ -1343,13 +1571,26 @@ class BazaarHomeScreen(
 
     /** The sortable columns of whichever tab is open, or null for one that isn't sortable. */
     private fun columnsFor(tab: Tab): List<DataTable.Column>? {
+        // Neither sorts: the watchlist keeps the player's own order, and Status lists fixed
+        // sources rather than a ranking - re-ordering "Forge, Minions, Auctions" by value
+        // would move a row the player navigates to by position.
+        if (tab == Tab.STATUS || tab == Tab.WATCH) return null
+
+        return visibleColumnsFor(tab)
+    }
+
+    /**
+     * The full layout of a tab, before the player's hidden columns are taken out.
+     *
+     * Split from [visibleColumnsFor] because the chooser has to list the columns that are *not*
+     * showing as well as the ones that are - offering only the visible ones would make hiding a
+     * column the last thing you could do to it.
+     */
+    private fun allColumnsFor(tab: Tab): List<DataTable.Column> {
         val width = panel.width() - PADDING * 2
         return when (tab) {
-            // Neither sorts: the watchlist keeps the player's own order, and Status lists fixed
-            // sources rather than a ranking - re-ordering "Forge, Minions, Auctions" by value
-            // would move a row the player navigates to by position.
-            Tab.STATUS -> null
-            Tab.WATCH -> null
+            Tab.STATUS -> BazaarColumns.status(width)
+            Tab.WATCH -> BazaarColumns.watchlist(width, changeColumnTitle())
             Tab.FLIP -> BazaarColumns.flips(width)
             Tab.NPC_BUY -> BazaarColumns.npcToBazaar(width)
             Tab.NPC_SELL -> BazaarColumns.bazaarToNpc(width)
@@ -1357,6 +1598,20 @@ class BazaarHomeScreen(
             Tab.FORGE -> BazaarColumns.crafts(width, forge = true)
         }
     }
+
+    /**
+     * What a tab actually draws: its layout less whatever the player put away, with the name
+     * column re-solved so the table still reaches the right edge.
+     *
+     * Every table goes through here rather than calling [BazaarColumns] directly, so a tab cannot
+     * be left out of the chooser by having been written before it existed. [Tab.name] is the saved
+     * id - already stable, already unique, and unlike the label it is not copy that gets reworded.
+     */
+    private fun visibleColumnsFor(tab: Tab): List<DataTable.Column> = BazaarColumns.withHidden(
+        allColumnsFor(tab),
+        ColumnPreferences.hiddenOn(tab.name),
+        activeSort = sortOf(tab)?.key,
+    )
 
     override fun mouseScrolled(mouseX: Double, mouseY: Double, scrollX: Double, scrollY: Double): Boolean {
         if (maxScroll <= 0) return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY)
@@ -1427,14 +1682,28 @@ class BazaarHomeScreen(
         private const val DETAIL_GAP = 4
 
         /** Progress bar at the right of the name column - a gauge beside the name, not under it. */
+        /**
+         * Where the Status page's progress bar starts: just after the item's name.
+         *
+         * Anchored to the text rather than to the right edge of the name column, which is the
+         * bug this replaced. That column is the one that absorbs the width freed by every column
+         * the player hides, so its right edge slides rightwards as figures are put away - and the
+         * bar slid with it, ending up across the row from the item it describes.
+         *
+         * The clamp is the other half: a name long enough to fill the column would otherwise push
+         * the bar out under the figures beside it. Pure arithmetic, so it can be checked without
+         * a running game.
+         */
+        internal fun progressBarLeft(nameLeft: Int, nameRight: Int, nameWidth: Int): Int {
+            val afterText = nameLeft + nameWidth + PROGRESS_GAP
+            return afterText.coerceAtMost(nameRight - PROGRESS_WIDTH - PROGRESS_GAP)
+        }
+
         private const val PROGRESS_WIDTH = 40
         private const val PROGRESS_HEIGHT = 3
 
-        /** Breathing room between the bar and the next column's figures. */
+        /** Breathing room on both sides of the bar: after the item name, and before the figures. */
         private const val PROGRESS_GAP = 6
-
-        /** Index of the name column in the Status table, which the progress bar sits inside. */
-        private const val NAME_COLUMN = 1
 
         private const val TOOLTIP_MAX_WIDTH = 160
 
@@ -1453,5 +1722,28 @@ class BazaarHomeScreen(
 
         /** The same, for the title bar's three labels before the middle one is dropped. */
         private const val TITLE_GAP = 12
+
+        /**
+         * Lower case, unlike the tab labels: it names a control, not one of the views.
+         *
+         * "Filters" rather than "Columns" - what the player is doing is deciding what the table
+         * shows them, and the word for that is the one they already know from everywhere else.
+         * Carries no count of what is hidden: the ticks inside say which figures are away, and a
+         * number on the button was noise on a control that is read at a glance.
+         */
+        private const val CHOOSER_LABEL = "Filters ▾"
+
+        private const val CHOOSER_BUTTON_HEIGHT = 14
+        private const val CHOOSER_BUTTON_PADDING = 4
+        private const val CHOOSER_ROW_HEIGHT = 12
+
+        /** Room for the checkbox, the gap after it and the padding at both ends. */
+        private const val CHOOSER_ENTRY_EXTRA = 24
+
+        /** So "Show all" is never wider than the panel listing the columns above it. */
+        private const val CHOOSER_MIN_WIDTH = 72
+
+        /** Where a chooser entry's label starts, clear of its checkbox. */
+        private const val CHOOSER_TEXT_INSET = 16
     }
 }

@@ -30,6 +30,7 @@ Oldest version first, newest at the bottom.
 
 + Added the Status tab, showing what you have working right now and how many coins are tied up in it.
 + Added forge timers that keep running after you leave the forge island.
++ Added a Filters button to the terminal, for putting away any figure you do not use on a tab.
 
 ### Improvements
 

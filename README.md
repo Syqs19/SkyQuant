@@ -301,7 +301,7 @@ for the whole backoff period.
 
 ```bash
 ./gradlew buildAndCollect    # jar lands in build/libs/<version>/
-./gradlew test               # 310 tests
+./gradlew test               # 434 tests
 ./gradlew runClient          # test client
 ```
 
